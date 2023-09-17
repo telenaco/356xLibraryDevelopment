@@ -74,6 +74,12 @@ enum class MCP356xBiasCurrent : uint8_t {
   DOUBLE    = 3
 };
 
+enum class MCP356xADCMode : uint8_t {
+  ADC_SHUTDOWN_MODE   = 1,  
+  ADC_STANDBY_MODE    = 2,  
+  ADC_CONVERSION_MODE = 3   
+};
+
 /* Enum value converts directly into register value.*/
 enum class MCP356xBiasBoost : uint8_t {
   HALF      = 0,
@@ -170,6 +176,8 @@ class MCP356x {
     int8_t  setOffsetCalibration(int32_t);
     int8_t  setGainCalibration(int32_t);
     int8_t  setGain(MCP356xGain);
+    int8_t  setConversionMode(MCP356xMode);
+    int8_t  setADCMode(MCP356xADCMode);
     int8_t  setBiasCurrent(MCP356xBiasCurrent);
     int8_t  setAMCLKPrescaler(MCP356xAMCLKPrescaler);
     int8_t  setOversamplingRatio(MCP356xOversamplingRatio);
@@ -202,7 +210,7 @@ class MCP356x {
     void printRegs(StringBuilder*);
     void printTimings(StringBuilder*);
     void printData(StringBuilder*);
-    void printChannelValues(StringBuilder*);
+    void printChannelValues(StringBuilder*, bool);
     void printChannel(MCP356xChannel, StringBuilder*);
 
 
