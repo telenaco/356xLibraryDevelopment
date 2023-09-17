@@ -1,60 +1,81 @@
-#include <Arduino.h>
+#include <SPI.h>
 #include "MCP356x.h"
 
-// Pin definitions
+#define TEST_PROG_VERSION "v1.0"
 
-#define SDI_PIN           11
-#define SDO_PIN           12
-#define SCK_PIN           13
 
-#define ADC0_CS         2  // Chip select for ADC
-#define ADC0_IRQ        3  // Interrupt for ADC
-#define ADC1_IRQ         4  // Interrupt for ADC
-#define ADC1_CS          5  // Chip select for ADC
-#define ADC2_IRQ         6  // Interrupt for ADC
-#define ADC2_CS          7  // Chip select for ADC
 
-// ADC configuration
-MCP356xConfig adcConfig;
+/*******************************************************************************
+* Pin definitions and hardware constants.
+*******************************************************************************/
+// Pins for the SPI connection to the ADC:
+#define ADC_CS_PIN          2  // Chip select for ADC
+#define SDI_PIN             11
+#define SDO_PIN             12
+#define SCK_PIN             13
+#define ADC_IRQ_PIN         3  // Interrupt for ADC
+#define MCLK_PIN             4  //
 
-// ADC objects
-MCP356x adc1(ADC0_IRQ, ADC0_CS, 0, 0, &adcConfig);
-MCP356x adc2(ADC1_IRQ, ADC1_CS, 0, 0, &adcConfig);
-MCP356x adc3(ADC2_IRQ, ADC2_CS, 0, 0, &adcConfig);
+/*******************************************************************************
+* Globals
+*******************************************************************************/
+// Variables that shape reporting...
+bool     autoreport        = true;  // Dump live data to the console?
+uint8_t  dev_selection     = 0;      // Start with the ADC selected.
+uint8_t  disp_update_rate  = 5;      // Update in Hz for LED display
+uint32_t disp_update_last  = 0;      // millis() when the display last updated.
+uint32_t disp_update_next  = 0;      // millis() when the display next updates.
 
-// Tracking variables
-uint16_t readCount[3] = {0, 0, 0}; 
-uint32_t lastReadTime[3] = {0, 0, 0};
+MCP356x adc0(ADC_IRQ_PIN, ADC_CS_PIN, MCLK_PIN);
+
+
+/*******************************************************************************
+* Functions to output things to the console
+*******************************************************************************/
+
+void printHelp() {
+  StringBuilder output("\nMCP356x Example ");
+  output.concat(TEST_PROG_VERSION);
+  output.concat("\nMeta:\n----------------------------\n");
+  output.concat("?     This output\n");
+  output.concat("a     Toggle autoreport\n");
+  output.concat("U/u   Autoreport rate up/down (0 disables rate limiting)\n");
+
+  output.concat("\nADC:\n----------------------------\n");
+  output.concat("I     Initialize ADC\n");
+  output.concat("R     Reset ADC\n");
+  output.concat("x     Refresh ADC shadow registers\n");
+  output.concat("p     Dump ADC pins\n");
+  output.concat("r     Dump ADC registers\n");
+  output.concat("i     ADC info\n");
+  output.concat("-/+   (De/In)crease circuit settling time\n");
+  output.concat("[/]   (De/In)crease oversampling ratio.\n");
+  output.concat("{/}   (De/In)crease gain.\n");
+  Serial.println((char*) output.string());
+}
+
 
 void setupADC(MCP356x& adc) {
-  adc.setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
   adc.init(&SPI);
+  adc.setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
   adc.setScanChannels(4,
     MCP356xChannel::DIFF_A,
     MCP356xChannel::DIFF_B,
     MCP356xChannel::DIFF_C,
     MCP356xChannel::DIFF_D);
+  adc.useInternalVref(true);
+  adc.setReferenceRange(3.3f, 0.0f);
   adc.setOversamplingRatio(MCP356xOversamplingRatio::OSR_64);
   //adc.setConversionMode(MCP356xMode::CONTINUOUS);
+  adc.setGain(MCP356xGain::GAIN_1);
+  ///adc.setADCMode(MCP356xADCMode::ADC_CONVERSION_MODE);
 }
 
-void readADC(MCP356x& adc, uint8_t adcNum) {
 
-  if(adc.isrFired()) {
-  
-    adc.read(); 
-    
-    // Update read count and time
-    readCount[adcNum-1]++;
-    if(readCount[adcNum-1] == 1000) {
-      lastReadTime[adcNum-1] = micros();
-      readCount[adcNum-1] = 0; 
-    }
-  }
-}
-
+/*******************************************************************************
+* Setup function
+*******************************************************************************/
 void setup() {
-
   Serial.begin(115200);
   Serial.print("\n\n");
 
@@ -64,51 +85,89 @@ void setup() {
   SPI.setMISO(SDO_PIN);
   SPI.setMOSI(SDI_PIN);
   SPI.begin();
-  
-  SPI.begin();
 
-  // Setup ADCs
-  setupADC(adc1);
-  setupADC(adc2);
-  setupADC(adc3);
+  printHelp();
+  disp_update_last = millis();
+  disp_update_next = disp_update_last + 1000;
+  
+  setupADC(adc0);
 }
 
+
+/*******************************************************************************
+* Main loop
+********************************************************************************/
 void loop() {
+  int8_t ret = 0;
+  StringBuilder output;
+  if (Serial.available()) {
+    char c = Serial.read();
+    switch (c) {
+      case '?':  printHelp();                      break;
+      case 'a':  autoreport = !autoreport;         break;
+      case 'r':  adc0.printRegs(&output);          break;
+      case 'i':  adc0.printData(&output);          break;
+      case 'c':  adc0.printChannelValues(&output); break;
+      case 'p':  adc0.printPins(&output);          break;
 
-  readADC(adc1, 1);
-  readADC(adc2, 2);
-  readADC(adc3, 3);
+      case 'U':
+      case 'u':
+        disp_update_rate += ('u' == c) ? -1 : 1;
+        output.concatf("Display update rate is now %uHz\n", disp_update_rate);
+        break;
 
-  // Print readout every 5 sec
-  const unsigned long printInterval = 5000;
-  static unsigned long lastPrintTime = 0;
-  
-  if (millis() - lastPrintTime >= printInterval) {
+      case '+':
+      case '-':
+        adc0.setCircuitSettleTime(adc0.getCircuitSettleTime() + (('+' == c) ? 1: -1));
+        output.concatf("ADC dwell time is now %ums.\n", adc0.getCircuitSettleTime());
+        break;
 
-    float totalRate = 0;
+      case '[':
+      case ']':
+        {
+          uint8_t osr = (uint8_t) adc0.getOversamplingRatio();
+          ret = adc0.setOversamplingRatio((MCP356xOversamplingRatio) (osr + (('[' == c) ? -1:1)));
+          output.concatf("Oversampling ratio is now %u.\n", (uint8_t) adc0.getOversamplingRatio());
+        }
+        break;
 
-    for (int i = 0; i < 3; i++) {
-    
-      float rate = 1000000.0 * readCount[i] / (micros() - lastReadTime[i]);
-      totalRate += rate;
+      case '{':
+      case '}':
+        {
+          uint8_t gv = (uint8_t) adc0.getGain();
+          ret = adc0.setGain((MCP356xGain) (gv + (('[' == c) ? -1:1)));
+          output.concatf("Gain is now %u.\n", 1 << ((uint8_t) adc0.getGain()));
+        }
+        break;
 
-      Serial.print("ADC"); 
-      Serial.print(i+1);
-      Serial.print(" rate: ");
-      Serial.print(rate);
-      Serial.println(" reads/sec");
-
-      readCount[i] = 0;
-      lastReadTime[i] = micros();
+      case 'R':
+        ret = adc0.reset();
+        output.concatf("reset() returns %d.\n", ret);
+        break;
+      case 'x':
+        ret = adc0.refresh();
+        output.concatf("refresh() returns %d.\n", ret);
+        break;
+      case 'I':
+        ret = adc0.init();
+        output.concatf("init() returns %d.\n", ret);
+        break;
     }
-    
-    float frequency = totalRate / 12.0;
-
-    Serial.print("Overall sampling frequency: ");
-    Serial.print(frequency);
-    Serial.println(" Hz");
-
-    lastPrintTime = millis();
+  }
+  else if (adc0.isr_fired) {
+    if (2 == adc0.read()) {
+      // The last of the whole set of requested channels was just read.
+      if (autoreport) {
+        if (disp_update_last <= millis()) {
+          disp_update_last = millis() + 1000;
+          adc0.printChannelValues(&output);
+        }
+      }
+    }
+  }
+  else {
   }
 
+  // Dump any accumulated output to the serial port.
+  if (output.length() > 0) { Serial.print((char*) output.string());  }
 }

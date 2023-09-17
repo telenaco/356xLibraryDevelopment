@@ -55,7 +55,7 @@ void setup() {
   Serial.begin(115200);
   Serial.print("\n\n");
 
-  analogWriteFrequency(14, 36621.09);
+  analogWriteFrequency(10, 146484.38);
 
   SPI.setSCK(SCK_PIN);
   SPI.setMISO(SDO_PIN);

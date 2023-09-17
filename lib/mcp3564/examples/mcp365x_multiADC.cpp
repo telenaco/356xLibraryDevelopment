@@ -50,8 +50,8 @@ void printHelp() {
 }
 
 void setupADC(MCP356x& adc) {
-  adc.setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
   adc.init(&SPI);
+  adc.setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
   adc.setScanChannels(4,
     MCP356xChannel::DIFF_A,
     MCP356xChannel::DIFF_B,
@@ -60,9 +60,9 @@ void setupADC(MCP356x& adc) {
   adc.useInternalVref(true);
   adc.setReferenceRange(3.3f, 0.0f);
   adc.setOversamplingRatio(MCP356xOversamplingRatio::OSR_64);
-  adc.setConversionMode(MCP356xMode::CONTINUOUS);
+  //adc.setConversionMode(MCP356xMode::CONTINUOUS);
   adc.setGain(MCP356xGain::GAIN_1);
-  adc.setADCMode(MCP356xADCMode::ADC_CONVERSION_MODE);
+  //adc.setADCMode(MCP356xADCMode::ADC_CONVERSION_MODE);
 }
 
 void handleADCRead(MCP356x& adc, StringBuilder& output, uint8_t adcNumber) {

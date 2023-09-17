@@ -1,7 +1,5 @@
 /**
  *
- *old header
- *
  * @file MCP356x.h
  * @brief Library for Microchip MCP356x 16-bit Analog-to-Digital Converter
  *
@@ -182,6 +180,21 @@ enum class MCP356xAMCLKPrescaler : uint8_t {
   OVER_8 = 3            // Divide the main clock by 8.
 };
 
+enum class MCP356xState : uint8_t {
+  UNINIT      = 0,   // init() has never been called.
+  PREINIT     = 1,   // Pin control is being established.
+  RESETTING   = 2,   // Driver is resetting the ADC.
+  DISCOVERY   = 3,   // Driver is probing for the ADC.
+  REGINIT     = 4,   // The initial ADC configuration is being written.
+  CLK_MEASURE = 5,   // Driver is measuring the clock.
+  CALIBRATION = 6,   // The ADC is self-calibrating.
+  USR_CONF    = 7,   // User config is being written.
+  IDLE        = 8,   // Powered up and calibrated, but not reading.
+  READING     = 9,   // Everything running, data collection proceeding.
+  FAULT       = 10,  // State machine encountered something it couldn't cope with.
+  MCLK_DETECT = 11   // Driver is detecting the MCLK frequency.
+};
+
 
 /**
 * @brief Class flags defining various states and configurations for the MCP356x ADC.
@@ -193,7 +206,7 @@ enum class MCP356xAMCLKPrescaler : uint8_t {
 */
 #define MCP356X_FLAG_DEVICE_PRESENT   0x00000001  // Indicates if an MCP356x device is present.
 #define MCP356X_FLAG_PINS_CONFIGURED  0x00000002  // Indicates if the pins have been configured.
-#define MCP356X_FLAG_INITIALIZED      0x00000004  // Indicates if the ADC's registers are initialized.
+#define MCP356X_FLAG_USER_CONFIG      0x00000004  // Indicates if the ADC's registers are initialized.
 #define MCP356X_FLAG_CALIBRATED       0x00000008  // Indicates if the ADC has been calibrated.
 #define MCP356X_FLAG_VREF_DECLARED    0x00000010  // Indicates if the application has declared a Vref for the ADC.
 #define MCP356X_FLAG_CRC_ERROR        0x00000020  // Indicates if a CRC error has been reported by the chip.
@@ -204,8 +217,10 @@ enum class MCP356xAMCLKPrescaler : uint8_t {
 #define MCP356X_FLAG_SAMPLED_OFFSET   0x00000400  // Indicates if the OFFSET channel was sampled for calibration.
 #define MCP356X_FLAG_3RD_ORDER_TEMP   0x00000800  // Indicates if additional computation should be spent to improve temperature conversion accuracy.
 #define MCP356X_FLAG_GENERATE_MCLK    0x00001000  // Directs the MCU to generate the ADC's main clock.
+#define MCP356X_FLAG_REFRESH_CYCLE    0x00002000  // We are undergoing a full register refresh.
 #define MCP356X_FLAG_HAS_INTRNL_VREF  0x00004000  // Indicates if the ADC supports an internal voltage reference.
 #define MCP356X_FLAG_USE_INTRNL_VREF  0x00008000  // Directs the ADC to enable its internal voltage reference.
+#define MCP356X_FLAG_SERVICING_IRQS   0x00010000  // The class will respond to IRQ signals.
 
 
 /**
@@ -227,6 +242,57 @@ enum class MCP356xAMCLKPrescaler : uint8_t {
                                     MCP356X_FLAG_SAMPLED_VCM | \
                                     MCP356X_FLAG_SAMPLED_OFFSET)
 
+/* A class to hold enum'd config for the ADC. */
+class MCP356xConfig {
+  public:
+    uint32_t                   scan;
+    uint32_t                   flags;
+    MCP356xMode                mode;
+    MCP356xGain                gain;
+    MCP356xBiasCurrent         bias;
+    MCP356xOversamplingRatio   over;
+    MCP356xAMCLKPrescaler      prescaler;
+
+    // Default constructor
+    MCP356xConfig() 
+      : scan(0), flags(0),
+        mode(MCP356xMode::ONESHOT_STANDBY),
+        gain(MCP356xGain::GAIN_1),
+        bias(MCP356xBiasCurrent::NONE),
+        over(MCP356xOversamplingRatio::OSR_256),
+        prescaler(MCP356xAMCLKPrescaler::OVER_1) {};
+
+    // Parameterized constructor
+    MCP356xConfig(
+      const uint32_t SCAN,
+      const uint32_t FLAGS,
+      const MCP356xMode MODE,
+      const MCP356xGain GAIN,
+      const MCP356xBiasCurrent BIAS,
+      const MCP356xOversamplingRatio OVER,
+      const MCP356xAMCLKPrescaler PRESCALER
+    ) 
+      : scan(SCAN), flags(FLAGS),
+        mode(MODE), gain(GAIN), bias(BIAS),
+        over(OVER), prescaler(PRESCALER) {};
+
+    // Copy constructor
+    MCP356xConfig(const MCP356xConfig* CFG) 
+      : scan(CFG->scan), flags(CFG->flags),
+        mode(CFG->mode), gain(CFG->gain), bias(CFG->bias),
+        over(CFG->over), prescaler(CFG->prescaler) {};
+
+    // Destructor
+    ~MCP356xConfig() {};
+
+    // void MCP356xConfig::printConfig() {
+    // Serial.println("MCP356xConfig Settings:");
+    // Serial.print("scan: "); Serial.println(scan);
+    // Serial.print("flags: "); Serial.println(flags, HEX); // print in hexadecimal
+    // Serial.print("mode: "); Serial.println(static_cast<uint8_t>(mode)); 
+    // Serial.print("gain: "); Serial.println(static_cast<uint8_t>(gain)); 
+    // }
+};
 
 
 /**
@@ -241,9 +307,8 @@ public:
   bool isr_fired = false;                       // Flag indicating if an interrupt has been fired.
 
   // Constructors for different configurations.
-  MCP356x(uint8_t irq_pin, uint8_t cs_pin);
-  MCP356x(uint8_t irq_pin, uint8_t cs_pin, uint8_t mclk_pin);
-  MCP356x(uint8_t irq_pin, uint8_t cs_pin, uint8_t mclk_pin, uint8_t addr);
+  MCP356x(const uint8_t irq_pin, const uint8_t cs_pin,const MCP356xConfig*);
+
 
   ~MCP356x();                                   
 
@@ -251,9 +316,10 @@ public:
   virtual int8_t init(SPIClass*);               
   inline int8_t init() { return init(_bus); }   
 
-  int8_t read();                                
-  double valueAsVoltage(MCP356xChannel);        
-  int32_t value(MCP356xChannel);                
+    int8_t  read();
+    int8_t  refresh();
+    double  valueAsVoltage(MCP356xChannel);
+    int32_t value(MCP356xChannel);              
 
   bool scanComplete();                          
 
@@ -273,22 +339,23 @@ public:
   int8_t  setBiasCurrent(MCP356xBiasCurrent);
   int8_t  setAMCLKPrescaler(MCP356xAMCLKPrescaler);
   int8_t  setOversamplingRatio(MCP356xOversamplingRatio);
+  int8_t  calibrate();
   MCP356xOversamplingRatio getOversamplingRatio();
   MCP356xGain getGain();
+  MCP356xBiasCurrent getBiasCurrent();
+  MCP356xAMCLKPrescaler getAMCLKPrescaler();
 
-  int8_t setScanChannels(int count, ...);             
-  int8_t setReferenceRange(float plus, float minus);  
-  int8_t refresh();                                   
-
-  // Inline methods for retrieving ADC configurations and states.
-  inline uint8_t getIRQPin() { return _IRQ_PIN; };
-  inline bool    adcFound() { return _mcp356x_flag(MCP356X_FLAG_DEVICE_PRESENT); };
-  inline bool    adcConfigured() { return _mcp356x_flag(MCP356X_FLAG_INITIALIZED); };
-  inline bool    adcCalibrated() { return _mcp356x_flag(MCP356X_FLAG_CALIBRATED); };
-  inline bool    hasInternalVref() { return _mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF); };
-
-  bool usingInternalVref();                           
-  int8_t useInternalVref(bool);                       
+    int8_t  setScanChannels(int count, ...);
+    int8_t  setReferenceRange(float plus, float minus);
+    inline void    setMCLKFrequency(double x) {  _mclk_freq = x;  };
+    inline uint8_t getIRQPin() {        return _IRQ_PIN;  };
+    inline bool    adcFound() {         return _mcp356x_flag(MCP356X_FLAG_DEVICE_PRESENT);    };
+    inline bool    adcConfigured() {    return _mcp356x_flag(MCP356X_FLAG_USER_CONFIG);       };
+    inline bool    adcCalibrating() {   return (_current_state == MCP356xState::CALIBRATION); };
+    inline bool    adcCalibrated() {    return _mcp356x_flag(MCP356X_FLAG_CALIBRATED);        };
+    inline bool    hasInternalVref() {  return _mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF);   };
+    bool usingInternalVref();
+    int8_t useInternalVref(bool);                     
 
   bool isrFired() { return isr_fired; };              
 
@@ -307,9 +374,19 @@ public:
   void printPins(StringBuilder*);                     
   void printRegs(StringBuilder*);                     
   void printTimings(StringBuilder*);                  
-  void printData(StringBuilder*);                     
+  void printData(StringBuilder*);
+  void printDebug(StringBuilder*);                     
   void printChannelValues(StringBuilder*, bool);      
   void printChannel(MCP356xChannel, StringBuilder*);  
+  void printFaultMessage(StringBuilder*);
+
+  inline MCP356xState getPriorState() {       return _prior_state;     };
+  inline MCP356xState getCurrentState() {     return _current_state;   };
+  inline MCP356xState getDesiredState() {     return _desired_state;   };
+  inline void setDesiredState(MCP356xState x) {    _desired_state = x; };
+  inline bool stateStable() {   return (_desired_state == _current_state);  };
+
+  static const char* stateStr(const MCP356xState);
 
 
 protected:
@@ -318,19 +395,21 @@ protected:
 private:
     // Pin assignments
     const uint8_t  _IRQ_PIN;            
-    const uint8_t  _CS_PIN;             
-    const uint8_t  _MCLK_PIN;           
-    const uint8_t  _DEV_ADDR;           
+    const uint8_t  _CS_PIN;    
+    const uint8_t  _MCLK_PIN = 0;
+    const uint8_t  _DEV_ADDR = 0;         
+    MCP356xConfig _desired_conf;  
 
     SPIClass* _bus = nullptr;           
-    double    _mclk_freq = 0.0;         
+    double    _mclk_freq = 5000000.0;         
     double    _dmclk_freq = 0.0;        
     double    _drclk_freq = 0.0;        
     float     _vref_plus = 3.3;         
     float     _vref_minus = 0.0;        
 
-    uint32_t reg_shadows[16];           
-    int32_t  channel_vals[16];          
+    uint32_t _reg_shadows[16];           
+    int32_t  channel_vals[16];   
+    char faultMessage[100];         
     uint32_t _flags = 0;                
     uint32_t _channel_flags = 0;        
     uint32_t _discard_until_micros = 0; 
@@ -342,7 +421,16 @@ private:
     uint32_t micros_last_read = 0;      
     uint32_t micros_last_window = 0;    
     uint32_t _channel_backup = 0;       
-    uint8_t  _slot_number = 0;          
+    uint8_t  _slot_number = 0;  
+    MCP356xState _prior_state      = MCP356xState::UNINIT;
+    MCP356xState _current_state    = MCP356xState::UNINIT;
+    MCP356xState _desired_state    = MCP356xState::UNINIT;      
+
+    /* State machine functions */
+    int8_t _step_state_machine();
+    void   _set_state(MCP356xState);
+    void   _set_fault(const char*);
+    inline bool _measuring_clock() {  return (MCP356xState::CLK_MEASURE == _current_state);  };       
 
     // Private methods for internal operations and configurations.
     int8_t  _post_reset_fxn();                
@@ -354,13 +442,17 @@ private:
     uint8_t _channel_count();
     int8_t  _set_scan_channels(uint32_t);     
     int8_t  _calibrate_offset();              
-    int8_t  _mark_calibrated();               
+    int8_t  _mark_calibrated();
+    int8_t  _apply_usr_config();               
 
     bool   _mclk_in_bounds();                     
     int8_t _detect_adc_clock();                   
     double _calculate_input_clock(unsigned long); 
     int8_t _recalculate_clk_tree();               
-    int8_t _recalculate_settling_time();          
+    int8_t _recalculate_settling_time();   
+
+    int8_t   _set_shadow_value(MCP356xRegister, uint32_t val);
+    uint32_t _get_shadow_value(MCP356xRegister);
 
   int8_t _write_register(MCP356xRegister r, uint32_t val);
   int8_t _read_register(MCP356xRegister r);
@@ -369,10 +461,13 @@ private:
   int8_t  _normalize_data_register();
   float   _gain_value();
 
+  inline bool _servicing_irqs() {        return _mcp356x_flag(MCP356X_FLAG_SERVICING_IRQS);   };
+  inline void _servicing_irqs(bool x) {  _mcp356x_set_flag(MCP356X_FLAG_SERVICING_IRQS, x);   };
+
 
   inline bool _vref_declared() { return _mcp356x_flag(MCP356X_FLAG_VREF_DECLARED); };
   inline bool _scan_covers_channel(MCP356xChannel c) {
-    return (0x01 & (reg_shadows[(uint8_t)MCP356xRegister::SCAN] >> ((uint8_t)c)));
+    return (0x01 & (_reg_shadows[(uint8_t)MCP356xRegister::SCAN] >> ((uint8_t)c)));
   };
 
   /* Flag manipulation inlines */
