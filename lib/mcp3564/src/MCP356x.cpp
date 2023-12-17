@@ -21,22 +21,22 @@ volatile static MCP356x *INSTANCES[MCP356X_MAX_INSTANCES] = {
     0,
 };
 
-static SPISettings spi_settings(20000000, MSBFIRST, SPI_MODE0);  // Max is 20MHz
+static SPISettings spi_settings(20000000, MSBFIRST, SPI_MODE0); // Max is 20MHz
 
 /* Register widths in bytes. Index corresponds directly to register address. */
 static const uint8_t MCP356x_reg_width[16] = {1, 1, 1, 1, 1, 1, 1, 3,
                                               3, 3, 3, 3, 1, 1, 2, 2};
 
-static const uint16_t OSR1_VALUES[16] = {1,  1,  1,  1,  1,  2,  4,   8,
+static const uint16_t OSR1_VALUES[16] = {1, 1, 1, 1, 1, 2, 4, 8,
                                          16, 32, 40, 48, 80, 96, 160, 192};
 
-static const uint16_t OSR3_VALUES[16] = {32,  64,  128, 256, 512, 512,
+static const uint16_t OSR3_VALUES[16] = {32, 64, 128, 256, 512, 512,
                                          512, 512, 512, 512, 512, 512,
                                          512, 512, 512, 512};
 
 static const char *CHAN_NAMES[16] = {
-    "SE_0",   "SE_1",   "SE_2",   "SE_3",   "SE_4", "SE_5", "SE_6", "SE_7",
-    "DIFF_A", "DIFF_B", "DIFF_C", "DIFF_D", "TEMP", "AVDD", "VCM",  "OFFSET"};
+    "SE_0", "SE_1", "SE_2", "SE_3", "SE_4", "SE_5", "SE_6", "SE_7",
+    "DIFF_A", "DIFF_B", "DIFF_C", "DIFF_D", "TEMP", "AVDD", "VCM", "OFFSET"};
 
 /*
  * This is an ISR.
@@ -54,35 +54,29 @@ void mcp356x_isr2() { ((MCP356x *)INSTANCES[2])->isr_fired = true; }
  * Constructors/destructors, class initialization functions and so-forth...
  *******************************************************************************/
 
-// Constructor. Delegated.
 
-MCP356x::MCP356x(uint8_t irq_pin, uint8_t cs_pin, uint8_t mclk_pin)
-    : MCP356x(irq_pin, cs_pin, mclk_pin, 0x01) {}
 
 // Constructor specifying device address.
-MCP356x::MCP356x(uint8_t irq_pin, uint8_t cs_pin, uint8_t mclk_pin,
-                 uint8_t addr)
-    : _IRQ_PIN(irq_pin), _CS_PIN(cs_pin), _MCLK_PIN(mclk_pin), _DEV_ADDR(addr) {
-  bool unslotted = true;
-  for (uint8_t i = 0; i < MCP356X_MAX_INSTANCES; i++) {
-    if (unslotted) {
-      if (nullptr == INSTANCES[i]) {
-        _slot_number = i;
-        INSTANCES[_slot_number] = this;
-        unslotted = false;
-      }
+MCP356x::MCP356x(const MCP356xConfig& config)
+    : _IRQ_PIN(config.irq_pin), _CS_PIN(config.cs_pin), _MCLK_PIN(config.mclk_pin), _DEV_ADDR(config.addr) {
+    bool unslotted = true;
+    for (uint8_t i = 0; i < MCP356X_MAX_INSTANCES; i++) {
+        if (unslotted) {
+            if (nullptr == INSTANCES[i]) {
+                _slot_number            = i;
+                INSTANCES[_slot_number] = this;
+                unslotted               = false;
+            }
+        }
     }
-  }
 }
 
 /*
  * Destructor
  */
 MCP356x::~MCP356x() {
-  if (255 != _IRQ_PIN) {
-    detachInterrupt(digitalPinToInterrupt(_IRQ_PIN));
-  }
-  INSTANCES[_slot_number] = nullptr;
+    if (255 != _IRQ_PIN) { detachInterrupt(digitalPinToInterrupt(_IRQ_PIN)); }
+    INSTANCES[_slot_number] = nullptr;
 }
 
 /*
@@ -93,20 +87,20 @@ MCP356x::~MCP356x() {
  * registers. 0  if reset command was sent successfully.
  */
 int8_t MCP356x::reset() {
-  int8_t ret = _send_fast_command(0x38);
-  if (0 == ret) {
-    delay(75);  // <--- Arbitrary delay value
-    digitalWrite(_CS_PIN, 0);
-    digitalWrite(_CS_PIN, 1);
-    digitalWrite(_CS_PIN, 0);
-    digitalWrite(_CS_PIN, 1);  // Twiddle the CS line to ensure SPI reset.
-    ret = _clear_registers();
+    int8_t ret = _send_fast_command(0x38);
     if (0 == ret) {
-      delay(75);  // <--- Arbitrary delay value
-      ret = refresh();
+        delay(75); // <--- Arbitrary delay value
+        digitalWrite(_CS_PIN, 0);
+        digitalWrite(_CS_PIN, 1);
+        digitalWrite(_CS_PIN, 0);
+        digitalWrite(_CS_PIN, 1); // Twiddle the CS line to ensure SPI reset.
+        ret = _clear_registers();
+        if (0 == ret) {
+            delay(75); // <--- Arbitrary delay value
+            ret = refresh();
+        }
     }
-  }
-  return ret;
+    return ret;
 }
 
 /*
@@ -122,78 +116,77 @@ int8_t MCP356x::reset() {
  *   0  on success.
  */
 int8_t MCP356x::init(SPIClass *b) {
-  bool debug = false;  // Set this to true when you want to see debug outputs
+    bool debug = false; // Set this to true when you want to see debug outputs
 
-  int8_t pin_setup_ret = _ll_pin_init();  // Configure the pins if they are not already.
+    int8_t pin_setup_ret = _ll_pin_init(); // Configure the pins if they are not already.
 
-  int8_t ret = -4;
-  if (pin_setup_ret >= 0) {
-    ret = -3;
-    if (nullptr != b) {
-      ret = -2;
-      _bus = b;
+    int8_t ret = -4;
+    if (pin_setup_ret >= 0) {
+        ret = -3;
+        if (nullptr != b) {
+            ret  = -2;
+            _bus = b;
 
-      if (0 == reset()) {
-        ret = -5;
-        if (0 == _post_reset_fxn()) {
-          if (!_mclk_in_bounds()) {
-            ret = -6;   //  -6 if clock detection failed.
-            int8_t det_ret = _detect_adc_clock();
-            if (debug) {  // Only enter the switch statement if debug is true
-              switch (det_ret) {
-                case -3:
-                  Serial.println("-> Class isn't ready for clock measurement.");
-                  break;
-                case -2:
-                  Serial.println("-> Clock measurement timed out.");
-                  break;
-                case -1:
-                  Serial.println("-> Problem communicating with the ADC.");
-                  break;
-                case 0:
-                  Serial.println("-> Clock signal within expected range determined.");
-                  break;
-                case 1:
-                  Serial.println("-> Clock rate out of bounds or appears nonsensical.");
-                  break;
-                default:
-                  Serial.println("Unknown return from _detect_adc_clock.");
-                  break;
-              }
+            if (0 == reset()) {
+                ret = -5;
+                if (0 == _post_reset_fxn()) {
+                    if (!_mclk_in_bounds()) {
+                        ret            = -6; //  -6 if clock detection failed.
+                        int8_t det_ret = _detect_adc_clock();
+                        if (debug) { // Only enter the switch statement if debug is true
+                            switch (det_ret) {
+                                case -3:
+                                    Serial.println("-> Class isn't ready for clock measurement.");
+                                    break;
+                                case -2:
+                                    Serial.println("-> Clock measurement timed out.");
+                                    break;
+                                case -1:
+                                    Serial.println("-> Problem communicating with the ADC.");
+                                    break;
+                                case 0:
+                                    Serial.println("-> Clock signal within expected range determined.");
+                                    break;
+                                case 1:
+                                    Serial.println("-> Clock rate out of bounds or appears nonsensical.");
+                                    break;
+                                default:
+                                    Serial.println("Unknown return from _detect_adc_clock.");
+                                    break;
+                            }
+                        }
+                    }
+                    if (_mclk_in_bounds()) {
+                        switch (_calibrate_offset()) {
+                            case 0:
+                                ret = 0;
+                                if (debug) { Serial.println("Offset calibration successful."); }
+                                break;
+                            default:
+                                ret = -7;
+                                if (debug) { Serial.println("Offset calibration failed."); }
+                                break;
+                        }
+                    }
+                } else {
+                    if (debug) { Serial.println("Post reset function failed."); }
+                }
+            } else {
+                if (debug) { Serial.println("ADC Reset failed."); }
             }
-          }
-          if (_mclk_in_bounds()) {
-            switch (_calibrate_offset()) {
-              case 0:
-                ret = 0;
-                if (debug) { Serial.println("Offset calibration successful."); }
-                break;
-              default:
-                ret = -7;
-                if (debug) { Serial.println("Offset calibration failed."); }
-                break;
-            }
-          }
         } else {
-          if (debug) { Serial.println("Post reset function failed."); }
+            if (debug) { Serial.println("SPI Bus is nullptr."); }
         }
-      } else {
-        if (debug) { Serial.println("ADC Reset failed."); }
-      }
     } else {
-      if (debug) { Serial.println("SPI Bus is nullptr."); }
+        if (debug) { Serial.println("Pin setup failed."); }
     }
-  } else {
-    if (debug) { Serial.println("Pin setup failed."); }
-  }
 
-  if (debug) {
-    Serial.print("Exiting MCP356x::init with return value: ");
-    Serial.println(ret);
-  }
-  return ret;
+    if (debug) {
+        Serial.print("Exiting MCP356x::init with return value: ");
+        Serial.println(ret);
+    }
+    return ret;
 }
-
 
 /*
  * Sets some of the more specialized features of the chip.
@@ -207,29 +200,29 @@ int8_t MCP356x::init(SPIClass *b) {
  *   0  on success.
  */
 int8_t MCP356x::setOption(uint32_t flgs) {
-  int8_t ret = 0;
-  if (flgs & MCP356X_FLAG_USE_INTERNAL_CLK) {
-    if (!(_mcp356x_flag(MCP356X_FLAG_PINS_CONFIGURED))) {
-      // Only allow this change if the pins are not yet configured.
-      _mcp356x_set_flag(MCP356X_FLAG_USE_INTERNAL_CLK);
-      _mcp356x_clear_flag(MCP356X_FLAG_GENERATE_MCLK);
-    } else {
-      ret = -1;
+    int8_t ret = 0;
+    if (flgs & MCP356X_FLAG_USE_INTERNAL_CLK) {
+        if (!(_mcp356x_flag(MCP356X_FLAG_PINS_CONFIGURED))) {
+            // Only allow this change if the pins are not yet configured.
+            _mcp356x_set_flag(MCP356X_FLAG_USE_INTERNAL_CLK);
+            _mcp356x_clear_flag(MCP356X_FLAG_GENERATE_MCLK);
+        } else {
+            ret = -1;
+        }
     }
-  }
-  if (flgs & MCP356X_FLAG_GENERATE_MCLK) {
-    if (!(_mcp356x_flag(MCP356X_FLAG_PINS_CONFIGURED))) {
-      // Only allow this change if the pins are not yet configured.
-      _mcp356x_set_flag(MCP356X_FLAG_GENERATE_MCLK);
-      _mcp356x_clear_flag(MCP356X_FLAG_USE_INTERNAL_CLK);
-    } else {
-      ret = -1;
+    if (flgs & MCP356X_FLAG_GENERATE_MCLK) {
+        if (!(_mcp356x_flag(MCP356X_FLAG_PINS_CONFIGURED))) {
+            // Only allow this change if the pins are not yet configured.
+            _mcp356x_set_flag(MCP356X_FLAG_GENERATE_MCLK);
+            _mcp356x_clear_flag(MCP356X_FLAG_USE_INTERNAL_CLK);
+        } else {
+            ret = -1;
+        }
     }
-  }
-  if (flgs & MCP356X_FLAG_3RD_ORDER_TEMP) {
-    _mcp356x_set_flag(MCP356X_FLAG_3RD_ORDER_TEMP);
-  }
-  return ret;
+    if (flgs & MCP356X_FLAG_3RD_ORDER_TEMP) {
+        _mcp356x_set_flag(MCP356X_FLAG_3RD_ORDER_TEMP);
+    }
+    return ret;
 }
 
 /*
@@ -239,32 +232,30 @@ int8_t MCP356x::setOption(uint32_t flgs) {
  *   0  on success.
  */
 int8_t MCP356x::_post_reset_fxn() {
-  int8_t ret = -1;
-  uint32_t c0_val = 0x000000C3;
+    int8_t   ret    = -1;
+    uint32_t c0_val = 0x000000C3;
 
-  // Enable fast command, disable IRQ on conversion start, IRQ pin is
-  // open-drain.
-  ret = _write_register(MCP356xRegister::IRQ, 0x00000002);
-  if (0 == ret) {
-    if (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK)) {
-      // Set CLK_SEL to use internal clock with no pin output.
-      c0_val &= 0xFFFFFFCF;
-      c0_val |= 0x00000020;
-    }
-    ret = _write_register(MCP356xRegister::CONFIG0, c0_val);
+    // Enable fast command, disable IRQ on conversion start, IRQ pin is
+    // open-drain.
+    ret = _write_register(MCP356xRegister::IRQ, 0x00000002);
     if (0 == ret) {
-      if (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK)) {
-        _mcp356x_set_flag(MCP356X_FLAG_MCLK_RUNNING);
-      }
-      // For simplicity, we select a 32-bit sign-extended data representation
-      // with channel identifiers.
-      ret = _write_register(MCP356xRegister::CONFIG3, 0x000000F0);
-      if (0 == ret) {
-        _mcp356x_set_flag(MCP356X_FLAG_INITIALIZED);
-      }
+        if (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK)) {
+            // Set CLK_SEL to use internal clock with no pin output.
+            c0_val &= 0xFFFFFFCF;
+            c0_val |= 0x00000020;
+        }
+        ret = _write_register(MCP356xRegister::CONFIG0, c0_val);
+        if (0 == ret) {
+            if (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK)) {
+                _mcp356x_set_flag(MCP356X_FLAG_MCLK_RUNNING);
+            }
+            // For simplicity, we select a 32-bit sign-extended data representation
+            // with channel identifiers.
+            ret = _write_register(MCP356xRegister::CONFIG3, 0x000000F0);
+            if (0 == ret) { _mcp356x_set_flag(MCP356X_FLAG_INITIALIZED); }
+        }
     }
-  }
-  return ret;
+    return ret;
 }
 
 /*
@@ -293,15 +284,15 @@ int8_t MCP356x::read() {
         case 1:
             // Read the ADC data register
             _read_register(MCP356xRegister::ADCDATA);
-            
+
             // Record the current microsecond timestamp
             micros_last_read = micros();
-            
+
             // Check if the read data should be processed or discarded
             if (_discard_until_micros <= micros_last_read) {
                 // Process and format the retrieved data
                 _normalize_data_register();
-                
+
                 // Verify if scanning across all channels has been completed
                 if (scanComplete()) {
                     ret = 2;
@@ -313,8 +304,8 @@ int8_t MCP356x::read() {
 
             if (micros_last_read - micros_last_window >= 1000000) {
                 micros_last_window = micros_last_read;
-                reads_per_second = read_accumulator;
-                read_accumulator = 0;
+                reads_per_second   = read_accumulator;
+                read_accumulator   = 0;
             }
             break;
         default:
@@ -324,8 +315,6 @@ int8_t MCP356x::read() {
     return ret;
 }
 
-
-
 /*
  * Read the IRQ register and respond to its contents.
  * Returns...
@@ -334,35 +323,35 @@ int8_t MCP356x::read() {
  *   1  if we need to read the data register.
  */
 int8_t MCP356x::_proc_irq_register() {
-  int8_t ret = -1;
-  if (0 == _read_register(MCP356xRegister::IRQ)) {
-    ret = 0;
-    uint8_t irq_reg_data = (uint8_t)reg_shadows[(uint8_t)MCP356xRegister::IRQ];
-    _mcp356x_set_flag(MCP356X_FLAG_CRC_ERROR, (0 == (0x20 & irq_reg_data)));
-    if (0 == (0x40 & irq_reg_data)) {  // Conversion is finished.
-      ret = 1;
+    int8_t ret = -1;
+    if (0 == _read_register(MCP356xRegister::IRQ)) {
+        ret                  = 0;
+        uint8_t irq_reg_data = (uint8_t)reg_shadows[(uint8_t)MCP356xRegister::IRQ];
+        _mcp356x_set_flag(MCP356X_FLAG_CRC_ERROR, (0 == (0x20 & irq_reg_data)));
+        if (0 == (0x40 & irq_reg_data)) { // Conversion is finished.
+            ret = 1;
+        }
+        if (0 == (0x08 & irq_reg_data)) { // Power-on-Reset has happened.
+            // Not sure why this happened, but reset the class.
+            //_post_reset_fxn();
+            digitalWrite(_CS_PIN, 0);
+            digitalWrite(_CS_PIN, 1);
+            digitalWrite(_CS_PIN, 0);
+            digitalWrite(_CS_PIN, 1);
+        }
+        if (0 == (0x20 & irq_reg_data)) { // CRC config error.
+            // Something is sideways in the configuration.
+            // Send start/restart conversion. Might also write 0xA5 to the LOCK
+            // register.
+            _write_register(MCP356xRegister::LOCK, 0x000000A5);
+            _send_fast_command(0x28);
+        }
+        if (0x01 & irq_reg_data) { // Conversion started
+                                   // We don't configure the class this way, and don't observe the IRQ.
+        }
     }
-    if (0 == (0x08 & irq_reg_data)) {  // Power-on-Reset has happened.
-      // Not sure why this happened, but reset the class.
-      //_post_reset_fxn();
-      digitalWrite(_CS_PIN, 0);
-      digitalWrite(_CS_PIN, 1);
-      digitalWrite(_CS_PIN, 0);
-      digitalWrite(_CS_PIN, 1);
-    }
-    if (0 == (0x20 & irq_reg_data)) {  // CRC config error.
-      // Something is sideways in the configuration.
-      // Send start/restart conversion. Might also write 0xA5 to the LOCK
-      // register.
-      _write_register(MCP356xRegister::LOCK, 0x000000A5);
-      _send_fast_command(0x28);
-    }
-    if (0x01 & irq_reg_data) {  // Conversion started
-      // We don't configure the class this way, and don't observe the IRQ.
-    }
-  }
-  isr_fired = !digitalRead(_IRQ_PIN);
-  return ret;
+    isr_fired = !digitalRead(_IRQ_PIN);
+    return ret;
 }
 
 /*
@@ -371,15 +360,15 @@ int8_t MCP356x::_proc_irq_register() {
  *   the wrong device entirely.
  */
 uint8_t MCP356x::_channel_count() {
-  switch ((uint16_t)reg_shadows[(uint8_t)MCP356xRegister::RESERVED2]) {
-    case 0x000C:
-      return 2;  // MCP3561
-    case 0x000D:
-      return 4;  // MCP3562
-    case 0x000F:
-      return 8;  // MCP3564
-  }
-  return 0;
+    switch ((uint16_t)reg_shadows[(uint8_t)MCP356xRegister::RESERVED2]) {
+        case 0x000C:
+            return 2; // MCP3561
+        case 0x000D:
+            return 4; // MCP3562
+        case 0x000F:
+            return 8; // MCP3564
+    }
+    return 0;
 }
 
 /*
@@ -389,45 +378,45 @@ uint8_t MCP356x::_channel_count() {
  *   AVdd. If that channel has never been read, the value will default to 3.3v.
  */
 double MCP356x::valueAsVoltage(MCP356xChannel chan) {
-  float vrp = _vref_plus;
-  float vrm = _vref_minus;
-  double result = 0.0;
-  switch (chan) {
-    case MCP356xChannel::SE_0:  // Single-ended channels.
-    case MCP356xChannel::SE_1:
-    case MCP356xChannel::SE_2:
-    case MCP356xChannel::SE_3:
-    case MCP356xChannel::SE_4:
-    case MCP356xChannel::SE_5:
-    case MCP356xChannel::SE_6:
-    case MCP356xChannel::SE_7:
-    case MCP356xChannel::DIFF_A:  // Differential channels.
-    case MCP356xChannel::DIFF_B:
-    case MCP356xChannel::DIFF_C:
-    case MCP356xChannel::DIFF_D:
-    case MCP356xChannel::OFFSET:
-      result = (value(chan) * (vrp - vrm)) / (8388608.0 * _gain_value());
-      break;
-    case MCP356xChannel::TEMP:
-      // TODO: voltage transfer fxn for temperature diode.
-      break;
-    case MCP356xChannel::AVDD:
-      result = value(chan) /
-               (0.33 * 8388608.0);  // Gain on this chan is always 0.33.
-      break;
-    case MCP356xChannel::VCM:
-      result = (value(chan) * (vrp - vrm)) / 8388608.0;
-      break;
-  }
-  return result;
+    float  vrp    = _vref_plus;
+    float  vrm    = _vref_minus;
+    double result = 0.0;
+    switch (chan) {
+        case MCP356xChannel::SE_0: // Single-ended channels.
+        case MCP356xChannel::SE_1:
+        case MCP356xChannel::SE_2:
+        case MCP356xChannel::SE_3:
+        case MCP356xChannel::SE_4:
+        case MCP356xChannel::SE_5:
+        case MCP356xChannel::SE_6:
+        case MCP356xChannel::SE_7:
+        case MCP356xChannel::DIFF_A: // Differential channels.
+        case MCP356xChannel::DIFF_B:
+        case MCP356xChannel::DIFF_C:
+        case MCP356xChannel::DIFF_D:
+        case MCP356xChannel::OFFSET:
+            result = (value(chan) * (vrp - vrm)) / (8388608.0 * _gain_value());
+            break;
+        case MCP356xChannel::TEMP:
+            // TODO: voltage transfer fxn for temperature diode.
+            result = value(chan);
+            break;
+        case MCP356xChannel::AVDD:
+            result = value(chan) / (0.33 * 8388608.0); // Gain on this chan is always 0.33.
+            break;
+        case MCP356xChannel::VCM:
+            result = (value(chan) * (vrp - vrm)) / 8388608.0;
+            break;
+    }
+    return result;
 }
 
 /*
  * Given a channel, return the last value.
  */
 int32_t MCP356x::value(MCP356xChannel chan) {
-  _channel_clear_new_flag(chan);
-  return channel_vals[(uint8_t)chan & 0x0F];
+    _channel_clear_new_flag(chan);
+    return channel_vals[(uint8_t)chan & 0x0F];
 }
 
 /*
@@ -435,13 +424,13 @@ int32_t MCP356x::value(MCP356xChannel chan) {
  * Enables the offset feature if the value is non-zero.
  */
 int8_t MCP356x::setOffsetCalibration(int32_t offset) {
-  int8_t ret = _write_register(MCP356xRegister::OFFSETCAL, (uint32_t)offset);
-  if (0 == ret) {
-    uint32_t c_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG3];
-    c_val = (0 != offset) ? (c_val | 0x00000002) : (c_val & 0xFFFFFFFD);
-    ret = _write_register(MCP356xRegister::CONFIG3, c_val);
-  }
-  return ret;
+    int8_t ret = _write_register(MCP356xRegister::OFFSETCAL, (uint32_t)offset);
+    if (0 == ret) {
+        uint32_t c_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG3];
+        c_val          = (0 != offset) ? (c_val | 0x00000002) : (c_val & 0xFFFFFFFD);
+        ret            = _write_register(MCP356xRegister::CONFIG3, c_val);
+    }
+    return ret;
 }
 
 /*
@@ -449,75 +438,70 @@ int8_t MCP356x::setOffsetCalibration(int32_t offset) {
  * Enables the scale feature if the value is non-zero.
  */
 int8_t MCP356x::setGainCalibration(int32_t multiplier) {
-  _write_register(MCP356xRegister::GAINCAL, (uint32_t)multiplier);
-  uint32_t c_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG3];
-  c_val = (0 != multiplier) ? (c_val | 0x00000001) : (c_val & 0xFFFFFFFE);
-  return _write_register(MCP356xRegister::CONFIG3, c_val);
+    _write_register(MCP356xRegister::GAINCAL, (uint32_t)multiplier);
+    uint32_t c_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG3];
+    c_val          = (0 != multiplier) ? (c_val | 0x00000001) : (c_val & 0xFFFFFFFE);
+    return _write_register(MCP356xRegister::CONFIG3, c_val);
 }
 
 /*
  * Changes the gain setting.
  */
 int8_t MCP356x::setGain(MCP356xGain g) {
-  uint32_t c_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG2];
-  uint32_t gain_val = (c_val & 0xFFFFFFC7) | ((uint32_t)g << 3);
-  return _write_register(MCP356xRegister::CONFIG2, gain_val);
+    uint32_t c_val    = reg_shadows[(uint8_t)MCP356xRegister::CONFIG2];
+    uint32_t gain_val = (c_val & 0xFFFFFFC7) | ((uint32_t)g << 3);
+    return _write_register(MCP356xRegister::CONFIG2, gain_val);
 }
 
 /*
  * Returns the current gain setting.
  */
 MCP356xGain MCP356x::getGain() {
-  return (MCP356xGain)((reg_shadows[(uint8_t)MCP356xRegister::CONFIG2] >> 3) &
-                       0x07);
+    return (MCP356xGain)((reg_shadows[(uint8_t)MCP356xRegister::CONFIG2] >> 3) & 0x07);
 }
 
 /*
  * Changes the BOOST setting.
  */
 int8_t MCP356x::setBiasCurrent(MCP356xBiasCurrent d) {
-  uint32_t c0_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG0] & 0x00F3FFFF;
-  c0_val += ((((uint8_t)d) & 0x03) << 18);
-  return _write_register(MCP356xRegister::CONFIG0, c0_val);
+    uint32_t c0_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG0] & 0x00F3FFFF;
+    c0_val += ((((uint8_t)d) & 0x03) << 18);
+    return _write_register(MCP356xRegister::CONFIG0, c0_val);
 }
 
 int8_t MCP356x::setADCMode(MCP356xADCMode mode) {
-  // Constants for better readability
-  const uint32_t ADC_MODE_CLEAR_MASK =
-      0xFFFFFFFC;  // Mask to clear the ADC mode bits
-  const uint8_t ADC_MODE_BIT_MASK =
-      0x03;  // Mask to get the two least significant bits
+    // Constants for better readability
+    const uint32_t ADC_MODE_CLEAR_MASK = 0xFFFFFFFC; // Mask to clear the ADC mode bits
+    const uint8_t  ADC_MODE_BIT_MASK   = 0x03;       // Mask to get the two least significant bits
 
-  // Read the current CONFIG0 register value
-  uint32_t config_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG0];
+    // Read the current CONFIG0 register value
+    uint32_t config_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG0];
 
-  // Clear the current ADC_MODE bits
-  config_val &= ADC_MODE_CLEAR_MASK;
+    // Clear the current ADC_MODE bits
+    config_val &= ADC_MODE_CLEAR_MASK;
 
-  // Set the desired ADC mode
-  config_val |= ((uint8_t)mode & ADC_MODE_BIT_MASK);
+    // Set the desired ADC mode
+    config_val |= ((uint8_t)mode & ADC_MODE_BIT_MASK);
 
-  // Write the modified value back to the CONFIG0 register
-  return _write_register(MCP356xRegister::CONFIG0, config_val);
+    // Write the modified value back to the CONFIG0 register
+    return _write_register(MCP356xRegister::CONFIG0, config_val);
 }
 
 int8_t MCP356x::setConversionMode(MCP356xMode mode) {
-  // constants
-  const uint8_t CONV_MODE_BIT_START = 6;
-  const uint8_t CONV_MODE_MASK = 0x03;  // Mask for the CONV_MODE[1:0] bits
-  const uint32_t CONFIG3_PRESERVE_MASK =
-      0xFFFFFFC0;  // Mask to preserve all bits in CONFIG3 except for
-                   // CONV_MODE[1:0]
+    // constants
+    const uint8_t  CONV_MODE_BIT_START   = 6;
+    const uint8_t  CONV_MODE_MASK        = 0x03;       // Mask for the CONV_MODE[1:0] bits
+    const uint32_t CONFIG3_PRESERVE_MASK = 0xFFFFFFC0; // Mask to preserve all bits in CONFIG3 except for
+                                                       // CONV_MODE[1:0]
 
-  // Preserve all bits in CONFIG3 except for CONV_MODE[1:0]
-  uint32_t c3_val =
-      reg_shadows[(uint8_t)MCP356xRegister::CONFIG3] & CONFIG3_PRESERVE_MASK;
+    // Preserve all bits in CONFIG3 except for CONV_MODE[1:0]
+    uint32_t c3_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG3] & CONFIG3_PRESERVE_MASK;
 
-  // Set the CONV_MODE[1:0] bits in CONFIG3 based on the desired conversion mode
-  c3_val |= ((uint8_t)mode & CONV_MODE_MASK) << CONV_MODE_BIT_START;
+    // Set the CONV_MODE[1:0] bits in CONFIG3 based on the desired conversion mode
+    c3_val |= ((uint8_t)mode & CONV_MODE_MASK) << CONV_MODE_BIT_START;
 
-  // Write the updated value to the CONFIG3 register
-  return _write_register(MCP356xRegister::CONFIG3, c3_val);
+    // Write the updated value to the CONFIG3 register
+    return _write_register(MCP356xRegister::CONFIG3, c3_val);
 }
 
 /*
@@ -528,36 +512,29 @@ int8_t MCP356x::setConversionMode(MCP356xMode mode) {
  *   0  on success.
  */
 int8_t MCP356x::setAMCLKPrescaler(MCP356xAMCLKPrescaler d) {
-  uint32_t c1_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x00FFFF3F;
-  c1_val |= ((((uint8_t)d) & 0x03) << 6);
-  int8_t ret = _write_register(MCP356xRegister::CONFIG1, c1_val);
-  if (0 == ret) {
-    ret = _recalculate_clk_tree();
-  }
-  return ret;
+    uint32_t c1_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x00FFFF3F;
+    c1_val |= ((((uint8_t)d) & 0x03) << 6);
+    int8_t ret = _write_register(MCP356xRegister::CONFIG1, c1_val);
+    if (0 == ret) { ret = _recalculate_clk_tree(); }
+    return ret;
 }
 
 /*
  * Changes the oversampling ratio.
  */
 int8_t MCP356x::setOversamplingRatio(MCP356xOversamplingRatio d) {
-  uint32_t c1_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x00FFFFC3;
-  c1_val |= ((((uint8_t)d) & 0x0F) << 2);
-  int8_t ret = _write_register(MCP356xRegister::CONFIG1, c1_val);
-  if (0 == ret) {
-    ret = _recalculate_settling_time();
-  }
-  return ret;
+    uint32_t c1_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x00FFFFC3;
+    c1_val |= ((((uint8_t)d) & 0x0F) << 2);
+    int8_t ret = _write_register(MCP356xRegister::CONFIG1, c1_val);
+    if (0 == ret) { ret = _recalculate_settling_time(); }
+    return ret;
 }
 
 /*
  * Gets the current oversampling ratio.
  */
 MCP356xOversamplingRatio MCP356x::getOversamplingRatio() {
-  return (MCP356xOversamplingRatio)((reg_shadows[(
-                                         uint8_t)MCP356xRegister::CONFIG1] &
-                                     0x0000003C) >>
-                                    2);
+    return (MCP356xOversamplingRatio)((reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x0000003C) >> 2);
 }
 
 /**
@@ -566,11 +543,9 @@ MCP356xOversamplingRatio MCP356x::getOversamplingRatio() {
  * @return true if Vref is using the internally generated value.
  */
 bool MCP356x::usingInternalVref() {
-  bool ret = false;
-  if (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF)) {
-    ret = (0 != (reg_shadows[(uint8_t)MCP356xRegister::CONFIG0] & 0x00000040));
-  }
-  return ret;
+    bool ret = false;
+    if (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF)) { ret = (0 != (reg_shadows[(uint8_t)MCP356xRegister::CONFIG0] & 0x00000040)); }
+    return ret;
 }
 
 /**
@@ -580,18 +555,18 @@ bool MCP356x::usingInternalVref() {
  * @return 0 on success, -1 on "not supported", or -2 on I/O failure.
  */
 int8_t MCP356x::useInternalVref(bool x) {
-  int8_t ret = -1;
-  if (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF)) {
-    uint32_t c0_val =
-        reg_shadows[(uint8_t)MCP356xRegister::CONFIG0] & 0x00FFFFBF;
-    if (x) {
-      c0_val |= 0x00000040;
-      _vref_plus = 2.4;
-      _vref_minus = 0;
+    int8_t ret = -1;
+    if (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF)) {
+        uint32_t c0_val =
+            reg_shadows[(uint8_t)MCP356xRegister::CONFIG0] & 0x00FFFFBF;
+        if (x) {
+            c0_val |= 0x00000040;
+            _vref_plus  = 2.4;
+            _vref_minus = 0;
+        }
+        ret = (0 == _write_register(MCP356xRegister::CONFIG0, c0_val)) ? 0 : -2;
     }
-    ret = (0 == _write_register(MCP356xRegister::CONFIG0, c0_val)) ? 0 : -2;
-  }
-  return ret;
+    return ret;
 }
 
 /*******************************************************************************
@@ -606,56 +581,53 @@ int8_t MCP356x::useInternalVref(bool x) {
  *   1  if the pin setup is complete, and the clock needs measurement.
  */
 int8_t MCP356x::_ll_pin_init() {
-  int8_t ret = -1;
-  if (_mcp356x_flag(MCP356X_FLAG_PINS_CONFIGURED)) {
-    ret = 0;
-  } else if (255 != _CS_PIN) {
-    ret = 1;
-    pinMode(_CS_PIN, OUTPUT);
-    digitalWrite(_CS_PIN, 1);
-    if (255 != _IRQ_PIN) {
-      pinMode(_IRQ_PIN, INPUT_PULLUP);
-      switch (_slot_number) {
-        case 0:
-          attachInterrupt(digitalPinToInterrupt(_IRQ_PIN), mcp356x_isr0,
-                          FALLING);
-          break;
-        case 1:
-          attachInterrupt(digitalPinToInterrupt(_IRQ_PIN), mcp356x_isr1,
-                          FALLING);
-          break;
-        case 2:
-          attachInterrupt(digitalPinToInterrupt(_IRQ_PIN), mcp356x_isr2,
-                          FALLING);
-          break;
-        default:
+    int8_t ret = -1;
+    if (_mcp356x_flag(MCP356X_FLAG_PINS_CONFIGURED)) {
+        ret = 0;
+    } else if (255 != _CS_PIN) {
+        ret = 1;
+        pinMode(_CS_PIN, OUTPUT);
+        digitalWrite(_CS_PIN, 1);
+        if (255 != _IRQ_PIN) {
+            pinMode(_IRQ_PIN, INPUT_PULLUP);
+            switch (_slot_number) {
+                case 0:
+                    attachInterrupt(digitalPinToInterrupt(_IRQ_PIN), mcp356x_isr0, FALLING);
+                    break;
+                case 1:
+                    attachInterrupt(digitalPinToInterrupt(_IRQ_PIN), mcp356x_isr1, FALLING);
+                    break;
+                case 2:
+                    attachInterrupt(digitalPinToInterrupt(_IRQ_PIN), mcp356x_isr2, FALLING);
+                    break;
+                default:
 
-          break;
-      }
-    }
-    if (255 != _MCLK_PIN) {
-      if (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK)) {
-        pinMode(_MCLK_PIN, INPUT);
-        _detect_adc_clock();
-
-      } else {
-        pinMode(_MCLK_PIN, OUTPUT);
-        if (_mcp356x_flag(MCP356X_FLAG_GENERATE_MCLK)) {
-          analogWriteFrequency(_MCLK_PIN, 4915200);
-          analogWrite(_MCLK_PIN, 128);
-          _mclk_freq = 4915200.0;
-        } else {
-          digitalWrite(_MCLK_PIN, 1);
+                    break;
+            }
         }
-        _mcp356x_set_flag(MCP356X_FLAG_MCLK_RUNNING);
-        ret = _recalculate_clk_tree();
-      }
-    }
-    _mcp356x_set_flag(MCP356X_FLAG_PINS_CONFIGURED);
-  } else {
-  }
+        if (255 != _MCLK_PIN) {
+            if (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK)) {
+                pinMode(_MCLK_PIN, INPUT);
+                _detect_adc_clock();
 
-  return ret;
+            } else {
+                pinMode(_MCLK_PIN, OUTPUT);
+                if (_mcp356x_flag(MCP356X_FLAG_GENERATE_MCLK)) {
+                    analogWriteFrequency(_MCLK_PIN, 4915200);
+                    analogWrite(_MCLK_PIN, 128);
+                    _mclk_freq = 4915200.0;
+                } else {
+                    digitalWrite(_MCLK_PIN, 1);
+                }
+                _mcp356x_set_flag(MCP356X_FLAG_MCLK_RUNNING);
+                ret = _recalculate_clk_tree();
+            }
+        }
+        _mcp356x_set_flag(MCP356X_FLAG_PINS_CONFIGURED);
+    } else {
+    }
+
+    return ret;
 }
 
 /*
@@ -663,124 +635,122 @@ int8_t MCP356x::_ll_pin_init() {
  * Also resets internal second-order data to avoid corrupted results.
  */
 int8_t MCP356x::_clear_registers() {
-  uint32_t flg_mask = MCP356X_FLAG_RESET_MASK;
-  if (!(_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK))) {
-    // The only way the clock isn't running is if it is running internally.
-    flg_mask |= MCP356X_FLAG_MCLK_RUNNING;
-  }
-  _flags = _flags & flg_mask;  // Reset the flags.
-  for (uint8_t i = 0; i < 16; i++) {
-    // We decline to revert RESERVED2, since we need it for device identity.
-    // RESERVED2 (0x000F for 3564, 0xD for 3562, 0xC for 3561)
-    reg_shadows[i] = (14 != i) ? 0 : reg_shadows[i];
-    channel_vals[i] = 0;
-  }
-    _channel_flags = 0;
+    uint32_t flg_mask = MCP356X_FLAG_RESET_MASK;
+    if (!(_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK))) {
+        // The only way the clock isn't running is if it is running internally.
+        flg_mask |= MCP356X_FLAG_MCLK_RUNNING;
+    }
+    _flags = _flags & flg_mask; // Reset the flags.
+    for (uint8_t i = 0; i < 16; i++) {
+        // We decline to revert RESERVED2, since we need it for device identity.
+        // RESERVED2 (0x000F for 3564, 0xD for 3562, 0xC for 3561)
+        reg_shadows[i]  = (14 != i) ? 0 : reg_shadows[i];
+        channel_vals[i] = 0;
+    }
+    _channel_flags        = 0;
     _discard_until_micros = 0;
-    _settling_us = 0;
-    read_count = 0;
-    read_accumulator = 0;
-    reads_per_second = 0;
-    micros_last_read = 0;
-    micros_last_window = 0;
-  return 0;
+    _settling_us          = 0;
+    read_count            = 0;
+    read_accumulator      = 0;
+    reads_per_second      = 0;
+    micros_last_read      = 0;
+    micros_last_window    = 0;
+    return 0;
 }
 
 /*
  * Does safety checks on the given value/register combo and writes to the part.
  */
 int8_t MCP356x::_write_register(MCP356xRegister r, uint32_t val) {
-  uint32_t safe_val = 0;
-  int8_t ret = -1;
-  uint8_t register_size = MCP356x_reg_width[(uint8_t)r];
-  switch (r) {
-    // Filter out the unimplemented bits.
-    case MCP356xRegister::CONFIG1:
-      safe_val = val & 0xFFFFFFFC;
-      break;
-    case MCP356xRegister::CONFIG2:
-      safe_val =
-          val | (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF) ? 0x00000001
-                                                             : 0x00000003);
-      break;
-    case MCP356xRegister::SCAN:
-      safe_val = val & 0xFFE0FFFF;
-      break;
-    case MCP356xRegister::RESERVED0:
-      safe_val = 0x00900000;
-      break;
-    case MCP356xRegister::RESERVED1:
-      safe_val = (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF) ? 0x00000030
-                                                              : 0x00000050);
-      break;
-    case MCP356xRegister::RESERVED2:
-      safe_val = val & 0x0000000F;
-      break;
-    // No safety required.
-    case MCP356xRegister::CONFIG0:
-    case MCP356xRegister::CONFIG3:
-    case MCP356xRegister::IRQ:
-    case MCP356xRegister::MUX:
-    case MCP356xRegister::TIMER:
-    case MCP356xRegister::OFFSETCAL:
-    case MCP356xRegister::GAINCAL:
-    case MCP356xRegister::LOCK:
-      safe_val = val;
-      break;
-    // Not writable.
-    case MCP356xRegister::ADCDATA:
-    case MCP356xRegister::CRCCFG:
-      return -3;
-  }
+    uint32_t safe_val      = 0;
+    int8_t   ret           = -1;
+    uint8_t  register_size = MCP356x_reg_width[(uint8_t)r];
+    switch (r) {
+        // Filter out the unimplemented bits.
+        case MCP356xRegister::CONFIG1:
+            safe_val = val & 0xFFFFFFFC;
+            break;
+        case MCP356xRegister::CONFIG2:
+            safe_val =
+                val | (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF) ? 0x00000001 : 0x00000003);
+            break;
+        case MCP356xRegister::SCAN:
+            safe_val = val & 0xFFE0FFFF;
+            break;
+        case MCP356xRegister::RESERVED0:
+            safe_val = 0x00900000;
+            break;
+        case MCP356xRegister::RESERVED1:
+            safe_val = (_mcp356x_flag(MCP356X_FLAG_HAS_INTRNL_VREF) ? 0x00000030 : 0x00000050);
+            break;
+        case MCP356xRegister::RESERVED2:
+            safe_val = val & 0x0000000F;
+            break;
+        // No safety required.
+        case MCP356xRegister::CONFIG0:
+        case MCP356xRegister::CONFIG3:
+        case MCP356xRegister::IRQ:
+        case MCP356xRegister::MUX:
+        case MCP356xRegister::TIMER:
+        case MCP356xRegister::OFFSETCAL:
+        case MCP356xRegister::GAINCAL:
+        case MCP356xRegister::LOCK:
+            safe_val = val;
+            break;
+        // Not writable.
+        case MCP356xRegister::ADCDATA:
+        case MCP356xRegister::CRCCFG:
+            return -3;
+    }
 
-  _bus->beginTransaction(spi_settings);
-  digitalWrite(_CS_PIN, LOW);
-  _bus->transfer(_get_reg_addr(r));
-  switch (register_size) {
-    case 3:
-      _bus->transfer((uint8_t)(safe_val >> 16) & 0xFF);  // MSB-first
-    case 2:
-      _bus->transfer((uint8_t)(safe_val >> 8) & 0xFF);
-    case 1:
-      _bus->transfer((uint8_t)safe_val & 0xFF);
-      ret = 0;
-      reg_shadows[(uint8_t)r] = safe_val;
-      break;
-    default:
-      ret = -2;  // Error on unexpected width.
-  }
-  digitalWrite(_CS_PIN, HIGH);
-  _bus->endTransaction();
-  return ret;
+    _bus->beginTransaction(spi_settings);
+    digitalWrite(_CS_PIN, LOW);
+    _bus->transfer(_get_reg_addr(r));
+    switch (register_size) {
+        case 3:
+            _bus->transfer((uint8_t)(safe_val >> 16) & 0xFF); // MSB-first
+        case 2:
+            _bus->transfer((uint8_t)(safe_val >> 8) & 0xFF);
+        case 1:
+            _bus->transfer((uint8_t)safe_val & 0xFF);
+            ret                     = 0;
+            reg_shadows[(uint8_t)r] = safe_val;
+            break;
+        default:
+            ret = -2; // Error on unexpected width.
+    }
+    digitalWrite(_CS_PIN, HIGH);
+    _bus->endTransaction();
+    return ret;
 }
 
 /*
  * Reads the given register.
  */
 int8_t MCP356x::_read_register(MCP356xRegister r) {
-  uint8_t bytes_to_read = MCP356x_reg_width[(uint8_t)r];
-  if (MCP356xRegister::ADCDATA == r) {
-    bytes_to_read = _output_coding_bytes();
-  }
+    uint8_t bytes_to_read = MCP356x_reg_width[(uint8_t)r];
+    if (MCP356xRegister::ADCDATA == r) {
+        bytes_to_read = _output_coding_bytes();
+    }
 
-  _bus->beginTransaction(spi_settings);
-  digitalWrite(_CS_PIN, LOW);
-  _bus->transfer((uint8_t)_get_reg_addr(r) | 0x01);
-  uint32_t temp_val = 0;
-  for (int i = 0; i < bytes_to_read; i++) {
-    temp_val = (temp_val << 8) + _bus->transfer(0);
-  }
-  digitalWrite(_CS_PIN, HIGH);
-  _bus->endTransaction();
-  reg_shadows[(uint8_t)r] = temp_val;
-  return 0;
+    _bus->beginTransaction(spi_settings);
+    digitalWrite(_CS_PIN, LOW);
+    _bus->transfer((uint8_t)_get_reg_addr(r) | 0x01);
+    uint32_t temp_val = 0;
+    for (int i = 0; i < bytes_to_read; i++) {
+        temp_val = (temp_val << 8) + _bus->transfer(0);
+    }
+    digitalWrite(_CS_PIN, HIGH);
+    _bus->endTransaction();
+    reg_shadows[(uint8_t)r] = temp_val;
+    return 0;
 }
 
 /*
  * Returns the number of bytes to be read from the data register.
  */
 uint8_t MCP356x::_output_coding_bytes() {
-  return (0 == reg_shadows[(uint8_t)MCP356xRegister::CONFIG3]) ? 3 : 4;
+    return (0 == reg_shadows[(uint8_t)MCP356xRegister::CONFIG3]) ? 3 : 4;
 }
 
 /*
@@ -788,91 +758,80 @@ uint8_t MCP356x::_output_coding_bytes() {
  * TODO: We rely on (assume) the output coding having chan-id and SGN.
  */
 int8_t MCP356x::_normalize_data_register() {
-  uint32_t rval = reg_shadows[(uint8_t)MCP356xRegister::ADCDATA];
-  MCP356xChannel chan = (MCP356xChannel)((rval >> 28) & 0x0F);
+    uint32_t       rval = reg_shadows[(uint8_t)MCP356xRegister::ADCDATA];
+    MCP356xChannel chan = (MCP356xChannel)((rval >> 28) & 0x0F);
 
-  // Sign extend, if needed.
-  int32_t nval =
-      (int32_t)(rval & 0x01000000) ? (rval | 0xFE000000) : (rval & 0x01FFFFFF);
+    // Sign extend, if needed.
+    int32_t nval =
+        (int32_t)(rval & 0x01000000) ? (rval | 0xFE000000) : (rval & 0x01FFFFFF);
 
-  // Update the over-range marker...
-  channel_vals[(uint8_t)chan] = nval;  // Store the decoded ADC reading.
-  _channel_set_ovr_flag(chan, ((nval > 8388609) | (nval < -8388609)));
-  _channel_set_new_flag(chan);  // Mark the channel as updated.
+    // Update the over-range marker...
+    channel_vals[(uint8_t)chan] = nval; // Store the decoded ADC reading.
+    _channel_set_ovr_flag(chan, ((nval > 8388609) | (nval < -8388609)));
+    _channel_set_new_flag(chan); // Mark the channel as updated.
 
-  switch (chan) {
-    // Different channels are interpreted differently...
-    case MCP356xChannel::SE_0:  // Single-ended channels.
-    case MCP356xChannel::SE_1:
-    case MCP356xChannel::SE_2:
-    case MCP356xChannel::SE_3:
-    case MCP356xChannel::SE_4:
-    case MCP356xChannel::SE_5:
-    case MCP356xChannel::SE_6:
-    case MCP356xChannel::SE_7:
-    case MCP356xChannel::DIFF_A:  // Differential channels.
-    case MCP356xChannel::DIFF_B:
-    case MCP356xChannel::DIFF_C:
-    case MCP356xChannel::DIFF_D:
-      break;
-    case MCP356xChannel::TEMP:
-      break;
-    case MCP356xChannel::AVDD:
-      _mcp356x_set_flag(MCP356X_FLAG_SAMPLED_AVDD);
-      if (!_mcp356x_flag(MCP356X_FLAG_VREF_DECLARED)) {
-        // If we are scanning the AVDD channel, we use that instead of the
-        //   assumed 3.3v.
-        //_vref_plus = nval / (8388608.0 * 0.33);
-      }
-      if (MCP356X_FLAG_ALL_CAL_MASK ==
-          (_mcp356x_flags() & MCP356X_FLAG_ALL_CAL_MASK)) {
-        _mark_calibrated();
-      }
-      break;
-    case MCP356xChannel::VCM:
-      // Nothing done here yet. Value should always be near 1.2v.
-      _mcp356x_set_flag(MCP356X_FLAG_SAMPLED_VCM);
-      if (MCP356X_FLAG_ALL_CAL_MASK ==
-          (_mcp356x_flags() & MCP356X_FLAG_ALL_CAL_MASK)) {
-        _mark_calibrated();
-      }
-      break;
-    case MCP356xChannel::OFFSET:
-      if (0 == setOffsetCalibration(nval)) {
-        _mcp356x_set_flag(MCP356X_FLAG_SAMPLED_OFFSET);
-      }
-      if (MCP356X_FLAG_ALL_CAL_MASK ==
-          (_mcp356x_flags() & MCP356X_FLAG_ALL_CAL_MASK)) {
-        _mark_calibrated();
-      }
-      break;
-  }
-  return 0;
+    switch (chan) {
+        // Different channels are interpreted differently...
+        case MCP356xChannel::SE_0: // Single-ended channels.
+        case MCP356xChannel::SE_1:
+        case MCP356xChannel::SE_2:
+        case MCP356xChannel::SE_3:
+        case MCP356xChannel::SE_4:
+        case MCP356xChannel::SE_5:
+        case MCP356xChannel::SE_6:
+        case MCP356xChannel::SE_7:
+        case MCP356xChannel::DIFF_A: // Differential channels.
+        case MCP356xChannel::DIFF_B:
+        case MCP356xChannel::DIFF_C:
+        case MCP356xChannel::DIFF_D:
+            break;
+        case MCP356xChannel::TEMP:
+            break;
+        case MCP356xChannel::AVDD:
+            _mcp356x_set_flag(MCP356X_FLAG_SAMPLED_AVDD);
+            if (!_mcp356x_flag(MCP356X_FLAG_VREF_DECLARED)) {
+                // If we are scanning the AVDD channel, we use that instead of the
+                //   assumed 3.3v.
+                //_vref_plus = nval / (8388608.0 * 0.33);
+            }
+            if (MCP356X_FLAG_ALL_CAL_MASK == (_mcp356x_flags() & MCP356X_FLAG_ALL_CAL_MASK)) { _mark_calibrated(); }
+            break;
+        case MCP356xChannel::VCM:
+            // Nothing done here yet. Value should always be near 1.2v.
+            _mcp356x_set_flag(MCP356X_FLAG_SAMPLED_VCM);
+            if (MCP356X_FLAG_ALL_CAL_MASK == (_mcp356x_flags() & MCP356X_FLAG_ALL_CAL_MASK)) { _mark_calibrated(); }
+            break;
+        case MCP356xChannel::OFFSET:
+            if (0 == setOffsetCalibration(nval)) { _mcp356x_set_flag(MCP356X_FLAG_SAMPLED_OFFSET); }
+            if (MCP356X_FLAG_ALL_CAL_MASK == (_mcp356x_flags() & MCP356X_FLAG_ALL_CAL_MASK)) { _mark_calibrated(); }
+            break;
+    }
+    return 0;
 }
 
 /*
  * Returns the gain of the ADC as a float, or zero on enum out-of-bounds.
  */
 float MCP356x::_gain_value() {
-  switch (getGain()) {
-    case MCP356xGain::GAIN_ONETHIRD:
-      return 0.33;
-    case MCP356xGain::GAIN_1:
-      return 1.0;
-    case MCP356xGain::GAIN_2:
-      return 2.0;
-    case MCP356xGain::GAIN_4:
-      return 4.0;
-    case MCP356xGain::GAIN_8:
-      return 8.0;
-    case MCP356xGain::GAIN_16:
-      return 16.0;
-    case MCP356xGain::GAIN_32:
-      return 32.0;
-    case MCP356xGain::GAIN_64:
-      return 64.0;
-  }
-  return 0.0;
+    switch (getGain()) {
+        case MCP356xGain::GAIN_ONETHIRD:
+            return 0.33;
+        case MCP356xGain::GAIN_1:
+            return 1.0;
+        case MCP356xGain::GAIN_2:
+            return 2.0;
+        case MCP356xGain::GAIN_4:
+            return 4.0;
+        case MCP356xGain::GAIN_8:
+            return 8.0;
+        case MCP356xGain::GAIN_16:
+            return 16.0;
+        case MCP356xGain::GAIN_32:
+            return 32.0;
+        case MCP356xGain::GAIN_64:
+            return 64.0;
+    }
+    return 0.0;
 }
 
 /*
@@ -882,7 +841,7 @@ float MCP356x::_gain_value() {
  *   in an SPI transaction with the ADC.
  */
 uint8_t MCP356x::_get_reg_addr(MCP356xRegister r) {
-  return (((_DEV_ADDR & 0x03) << 6) | (((uint8_t)r) << 2) | 0x02);
+    return (((_DEV_ADDR & 0x03) << 6) | (((uint8_t)r) << 2) | 0x02);
 }
 
 /*
@@ -891,42 +850,42 @@ uint8_t MCP356x::_get_reg_addr(MCP356xRegister r) {
  * defaults. -1 if a register read failed. 0  if we found an MCP356x.
  */
 int8_t MCP356x::refresh() {
-  uint8_t i = 0;
-  int8_t ret = 0;
-  while ((0 == ret) & (i < 16)) {
-    ret = _read_register((MCP356xRegister)i++);
-  }
-  if (0 == ret) {
-    ret = -2;
-    if (0x00900000 == reg_shadows[(uint8_t)MCP356xRegister::RESERVED0]) {
-      uint8_t res1_val =
-          (uint8_t)reg_shadows[(uint8_t)MCP356xRegister::RESERVED1];
-      switch (res1_val) {
-        case 0x30:
-        case 0x50:
-          // If the chip has an internal Vref, it will start up running and
-          //   connected.
-          _mcp356x_set_flag(MCP356X_FLAG_HAS_INTRNL_VREF, (res1_val == 0x30));
-          switch (reg_shadows[(uint8_t)MCP356xRegister::RESERVED2]) {
-            case 0x0C:
-            case 0x0D:
-            case 0x0F:
-              _mcp356x_set_flag(MCP356X_FLAG_DEVICE_PRESENT);
-              ret = 0;
-              break;
-            default:
-              //
-              break;
-          }
-          break;
-        default:
-          //
-          break;
-      }
+    uint8_t i   = 0;
+    int8_t  ret = 0;
+    while ((0 == ret) & (i < 16)) {
+        ret = _read_register((MCP356xRegister)i++);
     }
-    // else
-  }
-  return ret;
+    if (0 == ret) {
+        ret = -2;
+        if (0x00900000 == reg_shadows[(uint8_t)MCP356xRegister::RESERVED0]) {
+            uint8_t res1_val =
+                (uint8_t)reg_shadows[(uint8_t)MCP356xRegister::RESERVED1];
+            switch (res1_val) {
+                case 0x30:
+                case 0x50:
+                    // If the chip has an internal Vref, it will start up running and
+                    //   connected.
+                    _mcp356x_set_flag(MCP356X_FLAG_HAS_INTRNL_VREF, (res1_val == 0x30));
+                    switch (reg_shadows[(uint8_t)MCP356xRegister::RESERVED2]) {
+                        case 0x0C:
+                        case 0x0D:
+                        case 0x0F:
+                            _mcp356x_set_flag(MCP356X_FLAG_DEVICE_PRESENT);
+                            ret = 0;
+                            break;
+                        default:
+                            //
+                            break;
+                    }
+                    break;
+                default:
+                    //
+                    break;
+            }
+        }
+        // else
+    }
+    return ret;
 }
 
 /*
@@ -945,13 +904,13 @@ void MCP356x::discardUnsettledSamples() {
  *    0  on success.
  */
 int8_t MCP356x::_send_fast_command(uint8_t cmd) {
-  int8_t ret = 0;
-  _bus->beginTransaction(spi_settings);
-  digitalWrite(_CS_PIN, LOW);
-  _bus->transfer((uint8_t)((_DEV_ADDR & 0x03) << 6) | cmd);
-  digitalWrite(_CS_PIN, HIGH);
-  _bus->endTransaction();
-  return ret;
+    int8_t ret = 0;
+    _bus->beginTransaction(spi_settings);
+    digitalWrite(_CS_PIN, LOW);
+    _bus->transfer((uint8_t)((_DEV_ADDR & 0x03) << 6) | cmd);
+    digitalWrite(_CS_PIN, HIGH);
+    _bus->endTransaction();
+    return ret;
 }
 
 /*
@@ -964,79 +923,68 @@ int8_t MCP356x::_send_fast_command(uint8_t cmd) {
  *   0  on success.
  */
 int8_t MCP356x::setScanChannels(int count, ...) {
-  int8_t ret = (count > 0) ? 0 : -2;
-  uint8_t chan_count = _channel_count();
-  uint32_t existing_scan = reg_shadows[(uint8_t)MCP356xRegister::SCAN];
-  uint32_t chans = 0;
-  va_list args;
-  va_start(args, count);
-  for (int i = 0; i < count; i++) {
-    MCP356xChannel chan = va_arg(args, MCP356xChannel);
-    switch (chan) {
-      case MCP356xChannel::SE_0:
-      case MCP356xChannel::SE_1:
-      case MCP356xChannel::DIFF_A:
-      case MCP356xChannel::TEMP:
-      case MCP356xChannel::AVDD:
-      case MCP356xChannel::VCM:
-      case MCP356xChannel::OFFSET:
-        if (2 > chan_count) {
-          ret = -3;
+    int8_t   ret           = (count > 0) ? 0 : -2;
+    uint8_t  chan_count    = _channel_count();
+    uint32_t existing_scan = reg_shadows[(uint8_t)MCP356xRegister::SCAN];
+    uint32_t chans         = 0;
+    va_list  args;
+    va_start(args, count);
+    for (int i = 0; i < count; i++) {
+        MCP356xChannel chan = va_arg(args, MCP356xChannel);
+        switch (chan) {
+            case MCP356xChannel::SE_0:
+            case MCP356xChannel::SE_1:
+            case MCP356xChannel::DIFF_A:
+            case MCP356xChannel::TEMP:
+            case MCP356xChannel::AVDD:
+            case MCP356xChannel::VCM:
+            case MCP356xChannel::OFFSET:
+                if (2 > chan_count) { ret = -3; }
+                break;
+            case MCP356xChannel::SE_2:
+            case MCP356xChannel::SE_3:
+            case MCP356xChannel::DIFF_B:
+                if (4 > chan_count) { ret = -3; }
+                break;
+            case MCP356xChannel::SE_4:
+            case MCP356xChannel::SE_5:
+            case MCP356xChannel::SE_6:
+            case MCP356xChannel::SE_7:
+            case MCP356xChannel::DIFF_C:
+            case MCP356xChannel::DIFF_D:
+                if (8 != chan_count) { ret = -3; }
+                break;
+            default:
+                ret = -4;
+                break;
         }
-        break;
-      case MCP356xChannel::SE_2:
-      case MCP356xChannel::SE_3:
-      case MCP356xChannel::DIFF_B:
-        if (4 > chan_count) {
-          ret = -3;
+        if (0 == ret) { chans = chans | (1 << ((uint8_t)chan)); }
+    }
+    va_end(args);
+    if (0 == ret) { // If there were no foul ups, we can write the registers.
+        chans           = chans | (existing_scan & 0xFFFF0000);
+        _channel_backup = chans;
+        if (_mcp356x_flag(MCP356X_FLAG_CALIBRATED)) {
+            ret = _set_scan_channels(chans);
+        } else {
+            _channel_backup = chans;
+            ret             = 0;
         }
-        break;
-      case MCP356xChannel::SE_4:
-      case MCP356xChannel::SE_5:
-      case MCP356xChannel::SE_6:
-      case MCP356xChannel::SE_7:
-      case MCP356xChannel::DIFF_C:
-      case MCP356xChannel::DIFF_D:
-        if (8 != chan_count) {
-          ret = -3;
-        }
-        break;
-      default:
-        ret = -4;
-        break;
     }
-    if (0 == ret) {
-      chans = chans | (1 << ((uint8_t)chan));
-    }
-  }
-  va_end(args);
-  if (0 == ret) {  // If there were no foul ups, we can write the registers.
-    chans = chans | (existing_scan & 0xFFFF0000);
-    _channel_backup = chans;
-    if (_mcp356x_flag(MCP356X_FLAG_CALIBRATED)) {
-      ret = _set_scan_channels(chans);
-    } else {
-      _channel_backup = chans;
-      ret = 0;
-    }
-  }
-  return ret;
+    return ret;
 }
 
 int8_t MCP356x::_set_scan_channels(uint32_t rval) {
-  if (!_mcp356x_flag(MCP356X_FLAG_CALIBRATED)) {
-    _channel_backup = reg_shadows[(uint8_t)MCP356xRegister::SCAN];
-  }
-  return _write_register(MCP356xRegister::SCAN, (uint32_t)rval);
+    if (!_mcp356x_flag(MCP356X_FLAG_CALIBRATED)) { _channel_backup = reg_shadows[(uint8_t)MCP356xRegister::SCAN]; }
+    return _write_register(MCP356xRegister::SCAN, (uint32_t)rval);
 }
 
 /*
  * Do we have data for all the channels we asked for?
  */
 bool MCP356x::scanComplete() {
-  uint32_t scan_chans =
-      reg_shadows[(uint8_t)MCP356xRegister::SCAN] & 0x0000FFFF;
-  return (scan_chans == (_channel_flags & scan_chans));
+    uint32_t scan_chans = reg_shadows[(uint8_t)MCP356xRegister::SCAN] & 0x0000FFFF;
+    return (scan_chans == (_channel_flags & scan_chans));
 };
 
 /*
@@ -1044,10 +992,10 @@ bool MCP356x::scanComplete() {
  *   can be called from the application to manually define it.
  */
 int8_t MCP356x::setReferenceRange(float plus, float minus) {
-  _vref_plus = plus;
-  _vref_minus = minus;
-  _mcp356x_set_flag(MCP356X_FLAG_VREF_DECLARED);
-  return 0;
+    _vref_plus  = plus;
+    _vref_minus = minus;
+    _mcp356x_set_flag(MCP356X_FLAG_VREF_DECLARED);
+    return 0;
 }
 
 /*
@@ -1055,18 +1003,18 @@ int8_t MCP356x::setReferenceRange(float plus, float minus) {
  *   to arrive at the die temperature. Uses the high-accuracy third-order fit.
  */
 float MCP356x::getTemperature() {
-  int32_t t_lsb = value(MCP356xChannel::TEMP);
-  float ret = 0.0;
-  if (_mcp356x_flag(MCP356X_FLAG_3RD_ORDER_TEMP)) {
-    const double k1 = 0.0000000000000271 * (t_lsb * t_lsb * t_lsb);
-    const double k2 = -0.000000018 * (t_lsb * t_lsb);
-    const double k3 = 0.0055 * t_lsb;
-    const double k4 = -604.22;
-    ret = k1 + k2 + k3 + k4;
-  } else {
-    ret = 0.001581 * t_lsb - 324.27;
-  }
-  return ret;
+    int32_t t_lsb = value(MCP356xChannel::TEMP);
+    float   ret   = 0.0;
+    if (_mcp356x_flag(MCP356X_FLAG_3RD_ORDER_TEMP)) {
+        const double k1 = 0.0000000000000271 * (t_lsb * t_lsb * t_lsb);
+        const double k2 = -0.000000018 * (t_lsb * t_lsb);
+        const double k3 = 0.0055 * t_lsb;
+        const double k4 = -604.22;
+        ret             = k1 + k2 + k3 + k4;
+    } else {
+        ret = 0.001581 * t_lsb - 324.27;
+    }
+    return ret;
 }
 
 /*******************************************************************************
@@ -1079,8 +1027,8 @@ float MCP356x::getTemperature() {
  * Returns true if MCLK (as measured) if within operational boundaries.
  */
 bool MCP356x::_mclk_in_bounds() {
-  bool inBounds = (_mclk_freq > 1000000.0) && (_mclk_freq < 20000000.0);
-  return inBounds;
+    bool inBounds = (_mclk_freq > 1000000.0) && (_mclk_freq < 20000000.0);
+    return inBounds;
 }
 
 /*
@@ -1095,22 +1043,20 @@ bool MCP356x::_mclk_in_bounds() {
  * nonsensical
  */
 int8_t MCP356x::_detect_adc_clock() {
-    const uint32_t SAMPLE_TIME_MAX = 200000000;  // 200ms in microseconds
-    int8_t ret = -3;
+    const uint32_t SAMPLE_TIME_MAX = 200000000; // 200ms in microseconds
+    int8_t         ret             = -3;
 
     if (_mcp356x_flag(MCP356X_FLAG_PINS_CONFIGURED)) {
         ret = -1;
         if (0 == _write_register(MCP356xRegister::SCAN, 0)) {
             if (0 == _write_register(MCP356xRegister::MUX, 0xDE)) {
-                unsigned long micros_passed = 0;
+                unsigned long micros_passed     = 0;
                 unsigned long micros_adc_time_0 = micros();
-                uint16_t rcount = 0;
+                uint16_t      rcount            = 0;
                 while ((1000 > rcount) && (micros_passed < SAMPLE_TIME_MAX)) {
                     if (isr_fired) {
                         if (0 < read()) {
-                            if (0 == rcount) {
-                                resetReadCount();
-                            }
+                            if (0 == rcount) { resetReadCount(); }
                             rcount++;
                         }
                     }
@@ -1120,7 +1066,7 @@ int8_t MCP356x::_detect_adc_clock() {
                 if (micros_passed < SAMPLE_TIME_MAX) {
                     ret = 1;
                     _mcp356x_set_flag(MCP356X_FLAG_MCLK_RUNNING);
-                    _mclk_freq = _calculate_input_clock(micros_passed);  
+                    _mclk_freq = _calculate_input_clock(micros_passed);
                     if (_mclk_in_bounds()) {
                         _recalculate_clk_tree();
                         ret = 0;
@@ -1142,16 +1088,14 @@ int8_t MCP356x::_detect_adc_clock() {
  * MCLK frequency
  */
 double MCP356x::_calculate_input_clock(unsigned long elapsed_us) {
-  uint32_t osr_idx =
-      (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x0000003C) >> 2;
-  uint16_t osr1 = OSR1_VALUES[osr_idx];
-  uint16_t osr3 = OSR3_VALUES[osr_idx];
-  uint32_t pre_val =
-      (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x000000C0) >> 6;
+    uint32_t osr_idx = (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x0000003C) >> 2;
+    uint16_t osr1    = OSR1_VALUES[osr_idx];
+    uint16_t osr3    = OSR3_VALUES[osr_idx];
+    uint32_t pre_val = (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x000000C0) >> 6;
 
-  double _drclk = ((double)read_count) / ((double)elapsed_us) * 1000000.0;
+    double _drclk = ((double)read_count) / ((double)elapsed_us) * 1000000.0;
 
-  return (4 * (osr3 * osr1) * (1 << pre_val) * _drclk);
+    return (4 * (osr3 * osr1) * (1 << pre_val) * _drclk);
 }
 
 /*
@@ -1161,15 +1105,13 @@ double MCP356x::_calculate_input_clock(unsigned long elapsed_us) {
  *   0  if the calculation completed.
  */
 int8_t MCP356x::_recalculate_clk_tree() {
-  if (_mclk_in_bounds()) {
-    uint32_t pre_val =
-        (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x000000C0) >> 6;
-    _dmclk_freq = _mclk_freq / (4 * (1 << pre_val));
+    if (_mclk_in_bounds()) {
+        uint32_t pre_val = (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x000000C0) >> 6;
+        _dmclk_freq      = _mclk_freq / (4 * (1 << pre_val));
+        return _recalculate_settling_time();
+    }
 
-    return _recalculate_settling_time();
-  }
-
-  return -2;
+    return -2;
 }
 
 /*
@@ -1179,23 +1121,21 @@ int8_t MCP356x::_recalculate_clk_tree() {
  *   that the program should delay for an accurate reading.
  */
 int8_t MCP356x::_recalculate_settling_time() {
-  // Extract the OSR index from the CONFIG1
-  uint32_t osr_idx =
-      (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x0000003C) >> 2;
+    // Extract the OSR index from the CONFIG1
+    uint32_t osr_idx = (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x0000003C) >> 2;
 
-  // Retrieve the corresponding OSR values.
-  uint16_t osr1 = OSR1_VALUES[osr_idx];
-  uint16_t osr3 = OSR3_VALUES[osr_idx];
+    // Retrieve the corresponding OSR values.
+    uint16_t osr1 = OSR1_VALUES[osr_idx];
+    uint16_t osr3 = OSR3_VALUES[osr_idx];
 
-  // Calculate dmclks.
-  uint32_t dmclks = (3 * osr3) + ((osr1 - 1) * osr3);
+    // Calculate dmclks.
+    uint32_t dmclks = (3 * osr3) + ((osr1 - 1) * osr3);
 
-  // Calculate settling time in microseconds.
-  _settling_us = (1000000.0 * dmclks) / _dmclk_freq;
+    // Calculate settling time in microseconds.
+    _settling_us = (1000000.0 * dmclks) / _dmclk_freq;
 
-  return 0;
+    return 0;
 }
-
 
 /*
  * Reads the ADC channels that assist us with calibration.
@@ -1204,151 +1144,132 @@ int8_t MCP356x::_recalculate_settling_time() {
  *   0  if an offset calibration value was found and set.
  */
 int8_t MCP356x::_calibrate_offset() {
-  _channel_backup = reg_shadows[(uint8_t)MCP356xRegister::SCAN];
-  int8_t ret = _set_scan_channels(0x0000E000);
-  if (0 == ret) {
-    _mcp356x_clear_flag(MCP356X_FLAG_CALIBRATED);
-  }
-  return ret;
+    _channel_backup = reg_shadows[(uint8_t)MCP356xRegister::SCAN];
+    int8_t ret      = _set_scan_channels(0x0000E000);
+    if (0 == ret) { _mcp356x_clear_flag(MCP356X_FLAG_CALIBRATED); }
+    return ret;
 }
 
 int8_t MCP356x::_mark_calibrated() {
-  int8_t ret = _set_scan_channels(_channel_backup);
-  if (0 == ret) {
-    _mcp356x_set_flag(MCP356X_FLAG_CALIBRATED);
-  }
-  return ret;
+    int8_t ret = _set_scan_channels(_channel_backup);
+    if (0 == ret) { _mcp356x_set_flag(MCP356X_FLAG_CALIBRATED); }
+    return ret;
 }
 
 void MCP356x::printRegs(StringBuilder *output) {
-  output->concatf("reg_shadows[0] (ADCDATA)     = 0x%08x\n", reg_shadows[0]);
-  output->concatf("reg_shadows[1] (CONFIG0)     = 0x%02x\n", reg_shadows[1]);
-  output->concatf("reg_shadows[2] (CONFIG1)     = 0x%02x\n", reg_shadows[2]);
-  output->concatf("reg_shadows[3] (CONFIG2)     = 0x%02x\n", reg_shadows[3]);
-  output->concatf("reg_shadows[4] (CONFIG3)     = 0x%02x\n", reg_shadows[4]);
-  output->concatf("reg_shadows[5] (IRQ)         = 0x%02x\n", reg_shadows[5]);
-  output->concatf("reg_shadows[6] (MUX)         = 0x%02x\n", reg_shadows[6]);
-  output->concatf("reg_shadows[7] (SCAN)        = 0x%06x\n", reg_shadows[7]);
-  output->concatf("reg_shadows[8] (TIMER)       = 0x%06x\n", reg_shadows[8]);
-  output->concatf("reg_shadows[9] (OFFSETCAL)   = 0x%06x\n", reg_shadows[9]);
-  output->concatf("reg_shadows[10] (GAINCAL)    = 0x%06x\n", reg_shadows[10]);
-  output->concatf("reg_shadows[11] (RESERVED0)  = 0x%06x\n", reg_shadows[11]);
-  output->concatf("reg_shadows[12] (RESERVED1)  = 0x%02x\n", reg_shadows[12]);
-  output->concatf("reg_shadows[13] (LOCK)       = 0x%02x\n", reg_shadows[13]);
-  output->concatf("reg_shadows[14] (RESERVED2)  = 0x%04x\n", reg_shadows[14]);
-  output->concatf("reg_shadows[15] (CRCCFG)     = 0x%04x\n", reg_shadows[15]);
+    output->concatf("reg_shadows[0] (ADCDATA)     = 0x%08x\n", reg_shadows[0]);
+    output->concatf("reg_shadows[1] (CONFIG0)     = 0x%02x\n", reg_shadows[1]);
+    output->concatf("reg_shadows[2] (CONFIG1)     = 0x%02x\n", reg_shadows[2]);
+    output->concatf("reg_shadows[3] (CONFIG2)     = 0x%02x\n", reg_shadows[3]);
+    output->concatf("reg_shadows[4] (CONFIG3)     = 0x%02x\n", reg_shadows[4]);
+    output->concatf("reg_shadows[5] (IRQ)         = 0x%02x\n", reg_shadows[5]);
+    output->concatf("reg_shadows[6] (MUX)         = 0x%02x\n", reg_shadows[6]);
+    output->concatf("reg_shadows[7] (SCAN)        = 0x%06x\n", reg_shadows[7]);
+    output->concatf("reg_shadows[8] (TIMER)       = 0x%06x\n", reg_shadows[8]);
+    output->concatf("reg_shadows[9] (OFFSETCAL)   = 0x%06x\n", reg_shadows[9]);
+    output->concatf("reg_shadows[10] (GAINCAL)    = 0x%06x\n", reg_shadows[10]);
+    output->concatf("reg_shadows[11] (RESERVED0)  = 0x%06x\n", reg_shadows[11]);
+    output->concatf("reg_shadows[12] (RESERVED1)  = 0x%02x\n", reg_shadows[12]);
+    output->concatf("reg_shadows[13] (LOCK)       = 0x%02x\n", reg_shadows[13]);
+    output->concatf("reg_shadows[14] (RESERVED2)  = 0x%04x\n", reg_shadows[14]);
+    output->concatf("reg_shadows[15] (CRCCFG)     = 0x%04x\n", reg_shadows[15]);
 }
 
 void MCP356x::printPins(StringBuilder *output) {
-  output->concatf("IRQ:   %u\n", _IRQ_PIN);
-  output->concatf("CS:    %u\n", _CS_PIN);
-  output->concatf("MCLK:  %u\n", _MCLK_PIN);
+    output->concatf("IRQ:   %u\n", _IRQ_PIN);
+    output->concatf("CS:    %u\n", _CS_PIN);
+    output->concatf("MCLK:  %u\n", _MCLK_PIN);
 }
 
 void MCP356x::printTimings(StringBuilder *output) {
-  output->concatf("\tMCLK                = %.4f MHz\n", _mclk_freq /  1000000.0);
-  output->concatf("\tDMCLK               = %.4f MHz\n", _dmclk_freq / 1000000.0);
-  output->concatf("\tData rate           = %.4f MHz\n", _drclk_freq / 1000000.0);
-  output->concatf("\tReal sample rate    = %u\n", reads_per_second);
-  output->concatf("\tADC settling time   = %u\n", getSettlingTime());
-  output->concatf("\tTotal settling time (micros) = %u\n", _circuit_settle_us);
-  output->concatf("\tLast read (micros)  = %u\n", micros_last_read);
+    output->concatf("\tMCLK                = %.4f MHz\n", _mclk_freq / 1000000.0);
+    output->concatf("\tDMCLK               = %.4f MHz\n", _dmclk_freq / 1000000.0);
+    output->concatf("\tData rate           = %.4f MHz\n", _drclk_freq / 1000000.0);
+    output->concatf("\tReal sample rate    = %u\n", reads_per_second);
+    output->concatf("\tADC settling time   = %u\n", getSettlingTime());
+    output->concatf("\tTotal settling time (micros) = %u\n", _circuit_settle_us);
+    output->concatf("\tLast read (micros)  = %u\n", micros_last_read);
 }
 
 void MCP356x::printData(StringBuilder *output) {
-  StringBuilder prod_str("MCP356");
-  if (adcFound()) {
-    prod_str.concatf("%d", _channel_count() >> 1);
-    if (hasInternalVref()) prod_str.concat('R');
-  } else
-    prod_str.concat("x (not found)");
+    StringBuilder prod_str("MCP356");
+    if (adcFound()) {
+        prod_str.concatf("%d", _channel_count() >> 1);
+        if (hasInternalVref())
+            prod_str.concat('R');
+    } else
+        prod_str.concat("x (not found)");
 
-  StringBuilder::styleHeader2(output, (const char *)prod_str.string());
-  if (adcFound()) {
-    output->concatf("\tChannels:       %u\n", _channel_count());
-    output->concatf("\tClock running:  %c\n",
-                    (_mcp356x_flag(MCP356X_FLAG_MCLK_RUNNING) ? 'y' : 'n'));
-    output->concatf("\tConfigured:     %c\n", (adcConfigured() ? 'y' : 'n'));
-    output->concatf("\tCalibrated:     %c\n", (adcCalibrated() ? 'y' : 'n'));
-    if (adcCalibrated()) {
-      output->concat("\t");
-      printChannel(MCP356xChannel::OFFSET, output);
-      output->concat("\t");
-      printChannel(MCP356xChannel::VCM, output);
-      output->concat("\t");
-      printChannel(MCP356xChannel::AVDD, output);
-    } else {
-      output->concatf("\t  SAMPLED_OFFSET: %c\n",
-                      (_mcp356x_flag(MCP356X_FLAG_SAMPLED_OFFSET) ? 'y' : 'n'));
-      output->concatf("\t  SAMPLED_VCM:    %c\n",
-                      (_mcp356x_flag(MCP356X_FLAG_SAMPLED_VCM) ? 'y' : 'n'));
-      output->concatf("\t  SAMPLED_AVDD:   %c\n",
-                      (_mcp356x_flag(MCP356X_FLAG_SAMPLED_AVDD) ? 'y' : 'n'));
+    StringBuilder::styleHeader2(output, (const char *)prod_str.string());
+    if (adcFound()) {
+        output->concatf("\tChannels:       %u\n", _channel_count());
+        output->concatf("\tClock running:  %c\n", (_mcp356x_flag(MCP356X_FLAG_MCLK_RUNNING) ? 'y' : 'n'));
+        output->concatf("\tConfigured:     %c\n", (adcConfigured() ? 'y' : 'n'));
+        output->concatf("\tCalibrated:     %c\n", (adcCalibrated() ? 'y' : 'n'));
+        if (adcCalibrated()) {
+            output->concat("\t");
+            printChannel(MCP356xChannel::OFFSET, output);
+            output->concat("\t");
+            printChannel(MCP356xChannel::VCM, output);
+            output->concat("\t");
+            printChannel(MCP356xChannel::AVDD, output);
+        } else {
+            output->concatf("\t  SAMPLED_OFFSET: %c\n", (_mcp356x_flag(MCP356X_FLAG_SAMPLED_OFFSET) ? 'y' : 'n'));
+            output->concatf("\t  SAMPLED_VCM:    %c\n", (_mcp356x_flag(MCP356X_FLAG_SAMPLED_VCM) ? 'y' : 'n'));
+            output->concatf("\t  SAMPLED_AVDD:   %c\n", (_mcp356x_flag(MCP356X_FLAG_SAMPLED_AVDD) ? 'y' : 'n'));
+        }
+        output->concatf("\tCRC Error:      %c\n",
+                        (_mcp356x_flag(MCP356X_FLAG_CRC_ERROR) ? 'y' : 'n'));
+        output->concatf("\tisr_fired:      %c\n", (isr_fired ? 'y' : 'n'));
+        output->concatf("\tRead count:     %u\n", read_count);
+        output->concatf("\tGain:           x%.2f\n", _gain_value());
+        uint8_t _osr_idx = (uint8_t)getOversamplingRatio();
+        output->concatf("\tOversampling:   x%u\n", OSR1_VALUES[_osr_idx] * OSR3_VALUES[_osr_idx]);
+        output->concatf("\tVref source:    %sternal\n", (usingInternalVref() ? "In" : "Ex"));
+        output->concatf("\tVref declared:  %c\n", (_vref_declared() ? 'y' : 'n'));
+        output->concatf("\tVref range:     %.3f / %.3f\n", _vref_minus, _vref_plus);
+        output->concatf("\tClock SRC:      %sternal\n", (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK) ? "In" : "Ex"));
+        if (_scan_covers_channel(MCP356xChannel::TEMP)) {
+            output->concatf("\tTemperature:    %.2fC\n", getTemperature());
+            output->concatf("\tThermo fitting: %s\n", (_mcp356x_flag(MCP356X_FLAG_3RD_ORDER_TEMP) ? "3rd-order" : "Linear"));
+        }
     }
-    output->concatf("\tCRC Error:      %c\n",
-                    (_mcp356x_flag(MCP356X_FLAG_CRC_ERROR) ? 'y' : 'n'));
-    output->concatf("\tisr_fired:      %c\n", (isr_fired ? 'y' : 'n'));
-    output->concatf("\tRead count:     %u\n", read_count);
-    output->concatf("\tGain:           x%.2f\n", _gain_value());
-    uint8_t _osr_idx = (uint8_t)getOversamplingRatio();
-    output->concatf("\tOversampling:   x%u\n",
-                    OSR1_VALUES[_osr_idx] * OSR3_VALUES[_osr_idx]);
-    output->concatf("\tVref source:    %sternal\n",
-                    (usingInternalVref() ? "In" : "Ex"));
-    output->concatf("\tVref declared:  %c\n", (_vref_declared() ? 'y' : 'n'));
-    output->concatf("\tVref range:     %.3f / %.3f\n", _vref_minus, _vref_plus);
-    output->concatf(
-        "\tClock SRC:      %sternal\n",
-        (_mcp356x_flag(MCP356X_FLAG_USE_INTERNAL_CLK) ? "In" : "Ex"));
-    if (_scan_covers_channel(MCP356xChannel::TEMP)) {
-      output->concatf("\tTemperature:    %.2fC\n", getTemperature());
-      output->concatf("\tThermo fitting: %s\n",
-                      (_mcp356x_flag(MCP356X_FLAG_3RD_ORDER_TEMP) ? "3rd-order"
-                                                                  : "Linear"));
-    }
-  }
 }
 
 /*
  * Prints a single channel.
  */
 void MCP356x::printChannel(MCP356xChannel chan, StringBuilder *output) {
-  output->concatf("%s:\t%.6fv\t%s\n", CHAN_NAMES[((uint8_t)chan) & 0x0F],
-                  valueAsVoltage(chan),
-                  _channel_over_range(chan) ? "OvR" : " ");
+    output->concatf("%s:\t%.6fv\t%s\n", CHAN_NAMES[((uint8_t)chan) & 0x0F], valueAsVoltage(chan), _channel_over_range(chan) ? "OvR" : " ");
 }
 
 /*
  * Prints the values of all enabled channels.
  */
 void MCP356x::printChannelValues(StringBuilder *output, bool asVoltage) {
-  // Iterate over all possible channel enum values
-  for (uint8_t i = static_cast<uint8_t>(MCP356xChannel::SE_0);
-       i <= static_cast<uint8_t>(MCP356xChannel::VCM); i++) {
-    MCP356xChannel chan = static_cast<MCP356xChannel>(i);
+    // Iterate over all possible channel enum values
+    for (uint8_t i = static_cast<uint8_t>(MCP356xChannel::SE_0);
+         i <= static_cast<uint8_t>(MCP356xChannel::VCM); i++) {
+        MCP356xChannel chan = static_cast<MCP356xChannel>(i);
 
-    // Check if the current channel is enabled for scanning
-    if (_scan_covers_channel(chan)) {
-      switch (chan) {
-        case MCP356xChannel::TEMP:
-          // Special handling for temperature channel
-          output->concatf("Die temperature     = %.2fC\n", getTemperature());
-          break;
-        default:
-          // For all other channels, including VCM
-          if (asVoltage) {
-            // Display values in voltage format
-            output->concatf("%s:\t%.6fv\t%s\n", CHAN_NAMES[i & 0x0F],
-                            valueAsVoltage(chan),
-                            _channel_over_range(chan) ? "OvR" : " ");
-          } else {
-            // Display raw ADC values
-            output->concatf("%s:\t%d\t%s\n", CHAN_NAMES[i & 0x0F],
-                            value(chan),  // `value()` to get raw values.
-                            _channel_over_range(chan) ? "OvR" : " ");
-          }
-          break;
-      }
+        // Check if the current channel is enabled for scanning
+        if (_scan_covers_channel(chan)) {
+            switch (chan) {
+                case MCP356xChannel::TEMP:
+                    // Special handling for temperature channel
+                    output->concatf("Die temperature     = %.2fC\n", getTemperature());
+                    break;
+                default:
+                    // For all other channels, including VCM
+                    if (asVoltage) {
+                        // Display values in voltage format
+                        output->concatf("%s:\t%.6fv\t%s\n", CHAN_NAMES[i & 0x0F], valueAsVoltage(chan), _channel_over_range(chan) ? "OvR" : " ");
+                    } else {
+                        // Display raw ADC values
+                        output->concatf("%s:\t%d\t%s\n", CHAN_NAMES[i & 0x0F], value(chan), _channel_over_range(chan) ? "OvR" : " ");
+                    }
+                    break;
+            }
+        }
     }
-  }
 }
