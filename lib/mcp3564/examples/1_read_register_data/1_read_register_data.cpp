@@ -37,8 +37,8 @@ uint8_t  disp_update_rate  = 5;      // Update in Hz for LED display
 uint32_t disp_update_last  = 0;      // millis() when the display last updated.
 uint32_t disp_update_next  = 0;      // millis() when the display next updates.
 
-MCP356x adc0(ADC_IRQ_PIN, ADC_CS_PIN, MCLK_PIN);
-
+MCP356xConfig adc0Config = {ADC_IRQ_PIN, ADC_CS_PIN};
+MCP356x       adc0(adc0Config);
 
 /*******************************************************************************
 * Functions to output things to the console

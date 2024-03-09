@@ -122,7 +122,7 @@ struct MCP356xConfig {
     uint8_t irq_pin;
     uint8_t cs_pin;
     uint8_t mclk_pin = 0;
-    uint8_t addr = 0x01;  // Default address
+    uint8_t addr     = 0x01; // Default address
 };
 
 /*
@@ -164,15 +164,17 @@ class MCP356x {
   public:
     volatile bool isr_fired = false;
 
-    // MCP356x(uint8_t irq_pin, uint8_t cs_pin, uint8_t mclk_pin);
-    // MCP356x(uint8_t irq_pin, uint8_t cs_pin, uint8_t mclk_pin, uint8_t addr);
     MCP356x(const MCP356xConfig &config);
     ~MCP356x();
+
+    void setupADC(SPIClass *spiInterface, int numChannels, MCP356xOversamplingRatio osr);
+    void setSpecificChannels(int numChannels, ...);
 
     virtual int8_t reset();
     virtual int8_t init(SPIClass *);
     inline int8_t  init() { return init(_bus); }
     int8_t         read();
+    int            updateReadings();
     double         valueAsVoltage(MCP356xChannel);
     int32_t        value(MCP356xChannel);
 
@@ -309,7 +311,5 @@ class MCP356x {
     };
     inline bool _channel_over_range(MCP356xChannel c) { return (_channel_flags & (0x00010000 << (uint8_t)c)); };
 };
-
-
 
 #endif // __MCP356x_H__

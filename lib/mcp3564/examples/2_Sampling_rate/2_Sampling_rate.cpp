@@ -20,7 +20,8 @@ interval. The sample rate is then calculated and printed.
 #define MCLK_PIN 0    //
 
 // MCP356x Global Variables
-MCP356x adc0(ADC_IRQ_PIN, ADC_CS_PIN, MCLK_PIN);
+MCP356xConfig adc0Config = {ADC_IRQ_PIN, ADC_CS_PIN};
+MCP356x       adc0(adc0Config);
 unsigned long startTime;
 unsigned int sampleCount = 0;
 

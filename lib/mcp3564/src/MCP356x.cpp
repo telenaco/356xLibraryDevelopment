@@ -6,57 +6,52 @@ Author: J. Ian Lindsay
 #include "MCP356x.h"
 
 /*******************************************************************************
- *      _______.___________.    ___   .___________. __    ______     _______.
- *     /       |           |   /   \  |           ||  |  /      |   /       |
- *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
- *     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
- * .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
- * |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
- *
- * Static members and initializers should be located here.
+ * MCP356x Static Members and Initializers
+ * 
+ * This section contains static members and initializers for the MCP356x class.
+ * It includes settings for SPI communication, register widths, oversampling rates,
+ * and channel names. Additionally, it defines interrupt service routines (ISRs)
+ * for handling ADC data read interrupts.
  *******************************************************************************/
-// We can have up to four of these in a given system.
-#define MCP356X_MAX_INSTANCES 3
-volatile static MCP356x *INSTANCES[MCP356X_MAX_INSTANCES] = {
-    0,
-};
 
-static SPISettings spi_settings(20000000, MSBFIRST, SPI_MODE0); // Max is 20MHz
 
-/* Register widths in bytes. Index corresponds directly to register address. */
-static const uint8_t MCP356x_reg_width[16] = {1, 1, 1, 1, 1, 1, 1, 3,
-                                              3, 3, 3, 3, 1, 1, 2, 2};
+#define MCP356X_MAX_INSTANCES 3   // Maximum number of MCP356x instances.
+volatile static MCP356x *INSTANCES[MCP356X_MAX_INSTANCES] = {nullptr, nullptr, nullptr};
 
-static const uint16_t OSR1_VALUES[16] = {1, 1, 1, 1, 1, 2, 4, 8,
-                                         16, 32, 40, 48, 80, 96, 160, 192};
+static SPISettings spi_settings(20000000, MSBFIRST, SPI_MODE0); // SPI settings (20MHz max).
 
-static const uint16_t OSR3_VALUES[16] = {32, 64, 128, 256, 512, 512,
-                                         512, 512, 512, 512, 512, 512,
-                                         512, 512, 512, 512};
+/* Register widths in bytes. Indexed by register address. */
+static const uint8_t MCP356x_reg_width[16] = {1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 1, 1, 2, 2};
 
-static const char *CHAN_NAMES[16] = {
-    "SE_0", "SE_1", "SE_2", "SE_3", "SE_4", "SE_5", "SE_6", "SE_7",
-    "DIFF_A", "DIFF_B", "DIFF_C", "DIFF_D", "TEMP", "AVDD", "VCM", "OFFSET"};
+/* Oversampling ratio (OSR) values for various configurations. */
+static const uint16_t OSR1_VALUES[16] = {1, 1, 1, 1, 1, 2, 4, 8, 16, 32, 40, 48, 80, 96, 160, 192};
+static const uint16_t OSR3_VALUES[16] = {32, 64, 128, 256, 512, 512, 512, 512, 512, 512, 512, 512, 512, 512, 512, 512};
 
-/*
- * This is an ISR.
- */
-void mcp356x_isr0() { ((MCP356x *)INSTANCES[0])->isr_fired = true; }
-void mcp356x_isr1() { ((MCP356x *)INSTANCES[1])->isr_fired = true; }
-void mcp356x_isr2() { ((MCP356x *)INSTANCES[2])->isr_fired = true; }
+/* Human-readable names for ADC channels. */
+static const char *CHAN_NAMES[16] = {"SE_0", "SE_1", "SE_2", "SE_3", "SE_4", "SE_5", "SE_6", "SE_7",
+                                     "DIFF_A", "DIFF_B", "DIFF_C", "DIFF_D", "TEMP", "AVDD", "VCM", "OFFSET"};
+
+/* Interrupt Service Routines (ISRs) for MCP356x instances. */
+void mcp356x_isr0() { if (INSTANCES[0]) INSTANCES[0]->isr_fired = true; }
+void mcp356x_isr1() { if (INSTANCES[1]) INSTANCES[1]->isr_fired = true; }
+void mcp356x_isr2() { if (INSTANCES[2]) INSTANCES[2]->isr_fired = true; }
 
 /*******************************************************************************
- *   ___ _              ___      _ _              _      _
- *  / __| |__ _ ______ | _ ) ___(_) |___ _ _ _ __| |__ _| |_ ___
- * | (__| / _` (_-<_-< | _ \/ _ \ | / -_) '_| '_ \ / _` |  _/ -_)
- *  \___|_\__,_/__/__/ |___/\___/_|_\___|_| | .__/_\__,_|\__\___|
- *                                          |_|
- * Constructors/destructors, class initialization functions and so-forth...
+ * MCP356x Constructors, Destructor, and Initialization Functions
+ * 
+ * This section contains constructors, destructor, and other functions for initializing
+ * and configuring the MCP356x class. It includes methods for setting up the ADC, configuring
+ * channels, oversampling ratios, and other ADC parameters.
  *******************************************************************************/
 
-
-
-// Constructor specifying device address.
+/**
+ * @brief Constructor for the MCP356x class.
+ *
+ * This constructor initializes an instance of the MCP356x class with a specified configuration.
+ * It assigns the ADC to a free slot if available and sets up pin configurations.
+ *
+ * @param config Configuration structure containing pin assignments and device address.
+ */
 MCP356x::MCP356x(const MCP356xConfig& config)
     : _IRQ_PIN(config.irq_pin), _CS_PIN(config.cs_pin), _MCLK_PIN(config.mclk_pin), _DEV_ADDR(config.addr) {
     bool unslotted = true;
@@ -71,20 +66,79 @@ MCP356x::MCP356x(const MCP356xConfig& config)
     }
 }
 
-/*
- * Destructor
+/**
+ * @brief Destructor for the MCP356x class.
+ *
+ * This destructor detaches the interrupt associated with the MCP356x instance and
+ * clears its slot, allowing for other instances to be created.
  */
 MCP356x::~MCP356x() {
     if (255 != _IRQ_PIN) { detachInterrupt(digitalPinToInterrupt(_IRQ_PIN)); }
     INSTANCES[_slot_number] = nullptr;
 }
 
-/*
- * Send the fastcommand to bounce the ADC.
- * Returns...
- *   -2 if refresh found unexpected values.
- *   -1 if there was a problem writing the reset command or refreshing the
- * registers. 0  if reset command was sent successfully.
+/**
+ * @brief Sets up the ADC with specified configurations.
+ *
+ * This function initializes the ADC with a given SPI interface, number of channels,
+ * oversampling ratio, gain, and ADC mode.
+ *
+ * @param spiInterface Pointer to the SPI interface.
+ * @param numChannels Number of ADC channels to configure.
+ * @param osr Oversampling ratio.
+ */
+void MCP356x::setupADC(SPIClass* spiInterface, int numChannels, MCP356xOversamplingRatio osr) {
+        setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
+        init(spiInterface);
+    setSpecificChannels(numChannels, MCP356xChannel::DIFF_A, MCP356xChannel::DIFF_B, MCP356xChannel::DIFF_C, MCP356xChannel::DIFF_D); // Pass the desired channels here
+        setOversamplingRatio(osr);
+        setGain(MCP356xGain::GAIN_1);
+        setADCMode(MCP356xADCMode::ADC_CONVERSION_MODE);
+    }
+
+/**
+ * @brief Configures specific ADC channels for scanning.
+ *
+ * This function allows setting a variable number of channels for the ADC to scan.
+ * Channels are specified as variable arguments.
+ *
+ * @param numChannels Number of channels to set.
+ * @param ... Variable arguments representing the channels to set.
+ */
+void MCP356x::setSpecificChannels(int numChannels, ...) {
+    va_list args;
+    va_start(args, numChannels);
+
+    switch (numChannels) {
+        case 1:
+            setScanChannels(1, va_arg(args, MCP356xChannel));
+            break;
+        case 2:
+            setScanChannels(2, va_arg(args, MCP356xChannel), va_arg(args, MCP356xChannel));
+            break;
+        case 3:
+            setScanChannels(3, va_arg(args, MCP356xChannel), va_arg(args, MCP356xChannel), va_arg(args, MCP356xChannel));
+            break;
+        case 4:
+            setScanChannels(4, va_arg(args, MCP356xChannel), va_arg(args, MCP356xChannel), va_arg(args, MCP356xChannel), va_arg(args, MCP356xChannel));
+            break;
+        default:
+            // invalid number of channels
+            break;
+    }
+
+    va_end(args);
+}
+
+/**
+ * @brief Resets the MCP356x ADC.
+ *
+ * This function sends a fast command to reset the ADC. It ensures the SPI bus is properly reset by toggling the chip select (CS) line. The function then clears the registers and refreshes them.
+ *
+ * @return int8_t 
+ *         - -2 if refresh found unexpected values.
+ *         - -1 if there was a problem writing the reset command or refreshing the registers.
+ *         - 0 if reset command was sent successfully.
  */
 int8_t MCP356x::reset() {
     int8_t ret = _send_fast_command(0x38);
@@ -103,17 +157,25 @@ int8_t MCP356x::reset() {
     return ret;
 }
 
-/*
- * Resets the chip and writes our default configuration.
- * Returns...
- *   -7 if offset cal failed.
- *   -6 if clock detection failed.
- *   -5 if register refresh failed.
- *   -4 if pin setup failed.
- *   -3 if bad bus reference.
- *   -2 if reset failed.
- *   -1 if clock detection or calibration failed for some reason.
- *   0  on success.
+/**
+ * @brief Initializes the MCP356x ADC.
+ *
+ * This function resets the chip, sets up the necessary pins, and configures the device with default settings.
+ * It performs various checks and calibrations, including clock detection and offset calibration.
+ *
+ * @param b Pointer to the SPI bus object.
+ *
+ * @return int8_t 
+ *         - -7 if offset calibration failed.
+ *         - -6 if clock detection failed.
+ *         - -5 if register refresh failed.
+ *         - -4 if pin setup failed.
+ *         - -3 if bad bus reference.
+ *         - -2 if reset failed.
+ *         - -1 if clock detection or calibration failed for some reason.
+ *         - 0 on success.
+ *
+ * @note Set the debug variable to true for detailed debug outputs.
  */
 int8_t MCP356x::init(SPIClass *b) {
     bool debug = false; // Set this to true when you want to see debug outputs
@@ -188,16 +250,17 @@ int8_t MCP356x::init(SPIClass *b) {
     return ret;
 }
 
-/*
- * Sets some of the more specialized features of the chip.
- * Pass as an argument a select combination of flags defined in the
- *   header file.
- * NOTE: This fxn must be called ahead of first init(), since our
- *   pin configuration might be in conflict with ADC configuration
- *   otherwise.
- * Returns...
- *   -1 if called too late for a provided option.
- *   0  on success.
+/**
+ * @brief Sets specialized features of the MCP356x chip.
+ *
+ * This function configures the MCP356x with a combination of flags defined in the header file.
+ * It should be called before the first `init()` to avoid conflicts with ADC configuration.
+ *
+ * @param flgs Combination of flags for setting options.
+ *
+ * @return int8_t
+ *         - -1 if called after pin configuration, for options that require pre-configuration.
+ *         - 0 on successful setting of options.
  */
 int8_t MCP356x::setOption(uint32_t flgs) {
     int8_t ret = 0;
@@ -225,11 +288,15 @@ int8_t MCP356x::setOption(uint32_t flgs) {
     return ret;
 }
 
-/*
- * Handles our configurations after reset.
- * Returns...
- *   -1 on failure to write a register.
- *   0  on success.
+/**
+ * @brief Configures the MCP356x after a reset.
+ *
+ * This internal function sets up necessary configurations after the MCP356x chip has been reset.
+ * It handles register writing for IRQ settings, clock source selection, and data representation.
+ *
+ * @return int8_t
+ *         - -1 on failure to write a register.
+ *         - 0 on successful configuration post-reset.
  */
 int8_t MCP356x::_post_reset_fxn() {
     int8_t   ret    = -1;
@@ -258,18 +325,18 @@ int8_t MCP356x::_post_reset_fxn() {
     return ret;
 }
 
-/*
- * Reads the part's output register and performs the needed manipulation on the
- *   data, according to the current configuration.
- * NOTE: If the application recently called discardUnsettledSamples(), the
- * register shadow will not be updated unless the timeout has expired. But no
- * matter what, the true value of the register will be returned from this
- * function. So if the application wants to know if _valid_ data was read, it
- * should call newValue() or scanComplete() ahead of using it. Returns... -1 on
- * error reading from registers. 0  on successful read, but nothing to do. 1  if
- * data was ready and read, but discarded due to being within the declared
- * settling time. 2  if the read resulted in a full set of data for all channels
- * being scanned.
+/**
+ * @brief Reads the output register of the MCP356x and processes the data.
+ *
+ * This function handles the reading of the ADC data register and performs necessary data manipulation according to the current configuration. It also manages data validity and discards data if within the declared settling time. It checks if a full set of data for all channels being scanned is available.
+ *
+ * @return int8_t
+ *         - -1 on error reading from registers.
+ *         - 0 on successful read with no action required.
+ *         - 1 if data was ready and read but discarded due to settling time.
+ *         - 2 if the read resulted in a full set of data for all channels.
+ * 
+ * @note Call newValue() or scanComplete() before using the data to ensure validity.
  */
 int8_t MCP356x::read() {
     // Process the interrupt register and get the status
@@ -282,7 +349,8 @@ int8_t MCP356x::read() {
             break;
         // If the IRQ register indicates data is ready
         case 1:
-            // Read the ADC data register
+            // Read the ADC data register and save it on the corresponding 
+            // microcontroller register declared on this class
             _read_register(MCP356xRegister::ADCDATA);
 
             // Record the current microsecond timestamp
@@ -315,12 +383,30 @@ int8_t MCP356x::read() {
     return ret;
 }
 
-/*
- * Read the IRQ register and respond to its contents.
- * Returns...
- *   -1 if reading the IRQ register failed.
- *   0  if there is nothing to do after this.
- *   1  if we need to read the data register.
+int MCP356x::updateReadings() {
+    if (isr_fired) {
+        int8_t readStatus = read();
+        isr_fired = false;  // Reset ISR flag after processing to prepare for next data set.
+        
+        if (readStatus == 2) {
+            // Successfully processed new data.
+            return 1;  // Indicate that new data has been updated.
+        }
+    }
+    // No new data was processed.
+    return 0;  
+}
+
+/**
+ * @brief Processes the IRQ register and responds to its contents.
+ *
+ * This function reads the IRQ register of the MCP356x and takes actions based on its contents.
+ * It handles conversion completion, power-on-reset events, and CRC configuration errors.
+ *
+ * @return int8_t
+ *         - -1 if reading the IRQ register failed.
+ *         - 0 if there is nothing to do after reading.
+ *         - 1 if the data register needs to be read.
  */
 int8_t MCP356x::_proc_irq_register() {
     int8_t ret = -1;
@@ -354,10 +440,13 @@ int8_t MCP356x::_proc_irq_register() {
     return ret;
 }
 
-/*
- * Returns the number of channels this part supports. Should be (1, 2, 4). Any
- *   other value is invalid and indicates a need for a register sync (if 0) or
- *   the wrong device entirely.
+/**
+ * @brief Returns the number of channels supported by the MCP356x.
+ *
+ * This function checks the device's configuration to determine the number of supported channels.
+ * It should return 1, 2, 4, or 8 based on the MCP356x model used. Any other value indicates an issue requiring a register sync or possibly the wrong device type.
+ *
+ * @return uint8_t Number of supported channels (1, 2, 4, or 8). Returns 0 if an issue is detected.
  */
 uint8_t MCP356x::_channel_count() {
     switch ((uint16_t)reg_shadows[(uint8_t)MCP356xRegister::RESERVED2]) {
@@ -371,11 +460,15 @@ uint8_t MCP356x::_channel_count() {
     return 0;
 }
 
-/*
- * Walk the value backward through the ADC transfer function to arrive at the
- *   voltage on that channel.
- * If the application didn't set a reference voltage, we assume it is equal to
- *   AVdd. If that channel has never been read, the value will default to 3.3v.
+/**
+ * @brief Converts the ADC value to a voltage for a specified channel.
+ *
+ * This function calculates the voltage on a given channel by reversing the ADC transfer function.
+ * It assumes the reference voltage is equal to AVdd unless otherwise set. If a channel has never been read, the default value is assumed to be 3.3v.
+ *
+ * @param chan The channel to calculate the voltage for.
+ *
+ * @return double The voltage value for the specified channel.
  */
 double MCP356x::valueAsVoltage(MCP356xChannel chan) {
     float  vrp    = _vref_plus;
@@ -411,17 +504,26 @@ double MCP356x::valueAsVoltage(MCP356xChannel chan) {
     return result;
 }
 
-/*
- * Given a channel, return the last value.
+/**
+ * @brief Returns the last read value for a specified channel.
+ *
+ * @param chan The channel to get the value from.
+ *
+ * @return int32_t The last value read from the specified channel.
  */
 int32_t MCP356x::value(MCP356xChannel chan) {
     _channel_clear_new_flag(chan);
     return channel_vals[(uint8_t)chan & 0x0F];
 }
 
-/*
- * Sets the offset calibration for the ADC.
- * Enables the offset feature if the value is non-zero.
+/**
+ * @brief Sets the offset calibration for the ADC.
+ *
+ * This function writes the offset calibration value to the ADC and enables the offset feature if the provided value is non-zero.
+ *
+ * @param offset The offset calibration value.
+ *
+ * @return int8_t Status of the operation (0 on success, non-zero on error).
  */
 int8_t MCP356x::setOffsetCalibration(int32_t offset) {
     int8_t ret = _write_register(MCP356xRegister::OFFSETCAL, (uint32_t)offset);
@@ -433,9 +535,14 @@ int8_t MCP356x::setOffsetCalibration(int32_t offset) {
     return ret;
 }
 
-/*
- * Sets the scale calibration for the ADC.
- * Enables the scale feature if the value is non-zero.
+/**
+ * @brief Sets the gain calibration for the ADC.
+ *
+ * This function writes the gain calibration multiplier to the ADC and enables the gain feature if the provided value is non-zero.
+ *
+ * @param multiplier The gain calibration multiplier.
+ *
+ * @return int8_t Status of the operation (0 on success, non-zero on error).
  */
 int8_t MCP356x::setGainCalibration(int32_t multiplier) {
     _write_register(MCP356xRegister::GAINCAL, (uint32_t)multiplier);
@@ -444,8 +551,15 @@ int8_t MCP356x::setGainCalibration(int32_t multiplier) {
     return _write_register(MCP356xRegister::CONFIG3, c_val);
 }
 
-/*
- * Changes the gain setting.
+/**
+ * @brief Sets the gain setting of the MCP356x.
+ *
+ * This function configures the ADC's gain setting based on the provided MCP356xGain enumeration.
+ * The gain setting adjusts the input signal amplitude to utilize the ADC's dynamic range effectively.
+ *
+ * @param g The gain setting as defined in the MCP356xGain enumeration.
+ *
+ * @return int8_t Status of the operation (0 on success, non-zero on error).
  */
 int8_t MCP356x::setGain(MCP356xGain g) {
     uint32_t c_val    = reg_shadows[(uint8_t)MCP356xRegister::CONFIG2];
@@ -453,15 +567,27 @@ int8_t MCP356x::setGain(MCP356xGain g) {
     return _write_register(MCP356xRegister::CONFIG2, gain_val);
 }
 
-/*
- * Returns the current gain setting.
+/**
+ * @brief Retrieves the current gain setting of the MCP356x.
+ *
+ * This function returns the current gain setting of the ADC, which determines the input signal amplification.
+ *
+ * @return MCP356xGain The current gain setting.
  */
 MCP356xGain MCP356x::getGain() {
     return (MCP356xGain)((reg_shadows[(uint8_t)MCP356xRegister::CONFIG2] >> 3) & 0x07);
 }
 
-/*
- * Changes the BOOST setting.
+/**
+ * @brief Sets the bias current setting of the MCP356x.
+ *
+ * This function adjusts the ADC's bias current, impacting its power consumption and noise performance.
+ * The bias current setting is particularly relevant for low-power applications or when operating in environments with varying temperature conditions.
+ *
+ * @param d The bias current setting as defined in the MCP356xBiasCurrent enumeration.
+ *
+ * @return int8_t Status of the operation 
+ * (0 on success, non-zero on error).
  */
 int8_t MCP356x::setBiasCurrent(MCP356xBiasCurrent d) {
     uint32_t c0_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG0] & 0x00F3FFFF;
@@ -469,6 +595,18 @@ int8_t MCP356x::setBiasCurrent(MCP356xBiasCurrent d) {
     return _write_register(MCP356xRegister::CONFIG0, c0_val);
 }
 
+/**
+ * @brief Sets the ADC mode of the MCP356x.
+ *
+ * This function configures the ADC mode of the MCP356x to the desired setting. 
+ * The mode determines the operational characteristics of the ADC.
+ *
+ * @param mode The desired ADC mode as defined in the MCP356xADCMode enumeration.
+ *
+ * @return int8_t
+ *         - 0 on successful setting of the ADC mode.
+ *         - Non-zero error code if setting the mode fails.
+ */
 int8_t MCP356x::setADCMode(MCP356xADCMode mode) {
     // Constants for better readability
     const uint32_t ADC_MODE_CLEAR_MASK = 0xFFFFFFFC; // Mask to clear the ADC mode bits
@@ -487,6 +625,17 @@ int8_t MCP356x::setADCMode(MCP356xADCMode mode) {
     return _write_register(MCP356xRegister::CONFIG0, config_val);
 }
 
+/**
+ * @brief Sets the conversion mode of the MCP356x.
+ *
+ * This function configures the conversion mode of the MCP356x. The conversion mode determines how the ADC converts analog signals into digital values.
+ *
+ * @param mode The desired conversion mode as defined in the MCP356xMode enumeration.
+ *
+ * @return int8_t
+ *         - 0 on successful setting of the conversion mode.
+ *         - Non-zero error code if setting the mode fails.
+ */
 int8_t MCP356x::setConversionMode(MCP356xMode mode) {
     // constants
     const uint8_t  CONV_MODE_BIT_START   = 6;
@@ -504,12 +653,18 @@ int8_t MCP356x::setConversionMode(MCP356xMode mode) {
     return _write_register(MCP356xRegister::CONFIG3, c3_val);
 }
 
-/*
- * Changes the AMCLK prescaler.
- * Returns...
- *   -2 if MCLK frequency is unknown, but prescalar setting succeeded.
- *   -1 if reconfiguration of prescalar failed.
- *   0  on success.
+/**
+ * @brief Changes the AMCLK prescaler of the MCP356x.
+ *
+ * This function adjusts the AMCLK prescaler, which affects the modulator clock frequency.
+ * It ensures that the configuration is valid and recalculates the clock tree if necessary.
+ *
+ * @param d The desired AMCLK prescaler setting.
+ *
+ * @return int8_t
+ *         - -2 if MCLK frequency is unknown but prescaler setting succeeded.
+ *         - -1 if reconfiguration of the prescaler failed.
+ *         - 0 on successful update of the prescaler.
  */
 int8_t MCP356x::setAMCLKPrescaler(MCP356xAMCLKPrescaler d) {
     uint32_t c1_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x00FFFF3F;
@@ -519,8 +674,16 @@ int8_t MCP356x::setAMCLKPrescaler(MCP356xAMCLKPrescaler d) {
     return ret;
 }
 
-/*
- * Changes the oversampling ratio.
+/**
+ * @brief Sets the oversampling ratio for the MCP356x.
+ *
+ * This function configures the oversampling ratio of the ADC, affecting the resolution and noise performance. It recalculates the settling time based on the new ratio.
+ *
+ * @param d The desired oversampling ratio.
+ *
+ * @return int8_t
+ *         - -1 if reconfiguration failed.
+ *         - 0 on successful update of the oversampling ratio.
  */
 int8_t MCP356x::setOversamplingRatio(MCP356xOversamplingRatio d) {
     uint32_t c1_val = reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x00FFFFC3;
@@ -530,17 +693,23 @@ int8_t MCP356x::setOversamplingRatio(MCP356xOversamplingRatio d) {
     return ret;
 }
 
-/*
- * Gets the current oversampling ratio.
+/**
+ * @brief Retrieves the current oversampling ratio of the MCP356x.
+ *
+ * This function returns the current oversampling ratio setting of the ADC.
+ *
+ * @return MCP356xOversamplingRatio The current oversampling ratio.
  */
 MCP356xOversamplingRatio MCP356x::getOversamplingRatio() {
     return (MCP356xOversamplingRatio)((reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x0000003C) >> 2);
 }
 
 /**
- * Application-facing accessor for VREF selection, if available.
+ * @brief Checks if the MCP356x is using the internally generated Vref.
  *
- * @return true if Vref is using the internally generated value.
+ * This function returns a boolean indicating whether the ADC is configured to use its internal voltage reference.
+ *
+ * @return bool True if using internal Vref, false otherwise.
  */
 bool MCP356x::usingInternalVref() {
     bool ret = false;
@@ -549,10 +718,17 @@ bool MCP356x::usingInternalVref() {
 }
 
 /**
- * Application-facing accessor for VREF selection, if available.
+ * @brief Configures the MCP356x to use its internal Vref.
  *
- * @param x true will enable the internal Vref, if available.
- * @return 0 on success, -1 on "not supported", or -2 on I/O failure.
+ * This function enables or disables the use of the internal voltage reference for the ADC.
+ * It updates the configuration and adjusts the reference voltage values accordingly.
+ *
+ * @param x Boolean flag to enable (true) or disable (false) the internal Vref.
+ *
+ * @return int8_t
+ *         - 0 on successful configuration.
+ *         - -1 if the feature is not supported.
+ *         - -2 on I/O failure.
  */
 int8_t MCP356x::useInternalVref(bool x) {
     int8_t ret = -1;
@@ -573,12 +749,16 @@ int8_t MCP356x::useInternalVref(bool x) {
  * Internal functions
  *******************************************************************************/
 
-/*
- * Setup the low-level pin details. Execution is idempotent.
- * Returns...
- *   -1 if the pin setup is wrong. Class must halt.
- *   0  if the pin setup is complete.
- *   1  if the pin setup is complete, and the clock needs measurement.
+/**
+ * @brief Initializes the low-level pin configuration.
+ *
+ * This function sets up the necessary pins for the MCP356x operation, including CS, IRQ, and MCLK.
+ * The execution is idempotent, meaning it can be called multiple times without adverse effects.
+ *
+ * @return int8_t
+ *         - -1 if the pin setup is incorrect, requiring the class to halt.
+ *         - 0 if the pin setup is already complete.
+ *         - 1 if the pin setup is complete and the clock needs measurement.
  */
 int8_t MCP356x::_ll_pin_init() {
     int8_t ret = -1;
@@ -630,9 +810,13 @@ int8_t MCP356x::_ll_pin_init() {
     return ret;
 }
 
-/*
- * Resets the internal register shadows to their default values.
- * Also resets internal second-order data to avoid corrupted results.
+/**
+ * @brief Resets the internal register shadows to their default values.
+ *
+ * This function resets the internal state of the MCP356x, including the register shadows,
+ * second-order data, and various internal counters and flags, to ensure no corrupted results.
+ *
+ * @return int8_t Always returns 0, indicating the reset was successful.
  */
 int8_t MCP356x::_clear_registers() {
     uint32_t flg_mask = MCP356X_FLAG_RESET_MASK;
@@ -658,8 +842,20 @@ int8_t MCP356x::_clear_registers() {
     return 0;
 }
 
-/*
- * Does safety checks on the given value/register combo and writes to the part.
+/**
+ * @brief Writes a value to a specified register in the MCP356x.
+ *
+ * This function performs safety checks on the value/register combination before writing
+ * to the register. It filters out unimplemented bits and handles special cases for certain registers.
+ *
+ * @param r The register to write to.
+ * @param val The value to write to the register.
+ *
+ * @return int8_t
+ *         - -3 if the register is not writable.
+ *         - -2 if the register size is unexpected.
+ *         - -1 on a general error.
+ *         - 0 on success.
  */
 int8_t MCP356x::_write_register(MCP356xRegister r, uint32_t val) {
     uint32_t safe_val      = 0;
@@ -724,8 +920,15 @@ int8_t MCP356x::_write_register(MCP356xRegister r, uint32_t val) {
     return ret;
 }
 
-/*
- * Reads the given register.
+/**
+ * @brief Reads the value from a specified register in the MCP356x.
+ *
+ * This function reads the current value of the specified register, handling different
+ * register sizes and special cases for the ADC data register.
+ *
+ * @param r The register to read from.
+ *
+ * @return int8_t Always returns 0, indicating the read was successful.
  */
 int8_t MCP356x::_read_register(MCP356xRegister r) {
     uint8_t bytes_to_read = MCP356x_reg_width[(uint8_t)r];
@@ -746,16 +949,26 @@ int8_t MCP356x::_read_register(MCP356xRegister r) {
     return 0;
 }
 
-/*
- * Returns the number of bytes to be read from the data register.
+/**
+ * @brief Determines the number of bytes to read from the ADC data register.
+ *
+ * This function returns the number of bytes that should be read from the ADC data register,
+ * based on the current configuration settings.
+ *
+ * @return uint8_t The number of bytes to read from the ADC data register.
  */
 uint8_t MCP356x::_output_coding_bytes() {
     return (0 == reg_shadows[(uint8_t)MCP356xRegister::CONFIG3]) ? 3 : 4;
 }
 
-/*
- * Output coding correction and observation.
- * TODO: We rely on (assume) the output coding having chan-id and SGN.
+/**
+ * @brief Normalizes and updates the data from the ADC data register.
+ *
+ * This function processes the raw data from the ADC data register, performing sign extension
+ * and updating internal values. It handles different types of channels and updates flags based
+ * on the data read. The function assumes output coding includes channel ID and SGN.
+ *
+ * @return int8_t Always returns 0, indicating the normalization was successful.
  */
 int8_t MCP356x::_normalize_data_register() {
     uint32_t       rval = reg_shadows[(uint8_t)MCP356xRegister::ADCDATA];
@@ -809,8 +1022,13 @@ int8_t MCP356x::_normalize_data_register() {
     return 0;
 }
 
-/*
- * Returns the gain of the ADC as a float, or zero on enum out-of-bounds.
+/**
+ * @brief Returns the current gain value of the ADC.
+ *
+ * This function retrieves the gain setting from the ADC and returns its corresponding
+ * float value. If the gain setting is out of bounds, it returns zero.
+ *
+ * @return float The gain value as a float, or zero if the enum is out-of-bounds.
  */
 float MCP356x::_gain_value() {
     switch (getGain()) {
@@ -834,20 +1052,30 @@ float MCP356x::_gain_value() {
     return 0.0;
 }
 
-/*
- * Applies the device address and properly shifts the register address into
- *   a control byte. Always sets up for incremental read/write.
- * This never fails and always returns a byte to be used as the first byte
- *   in an SPI transaction with the ADC.
+/**
+ * @brief Generates a control byte for SPI transactions based on the given register.
+ *
+ * This function applies the device address and shifts the register address into a control byte.
+ * It sets up for incremental read/write operations and always returns a valid byte for SPI transactions.
+ *
+ * @param r The register to generate the control byte for.
+ *
+ * @return uint8_t The control byte for the specified register.
  */
 uint8_t MCP356x::_get_reg_addr(MCP356xRegister r) {
     return (((_DEV_ADDR & 0x03) << 6) | (((uint8_t)r) << 2) | 0x02);
 }
 
-/*
- * Cause a full refresh. Update our shadows with the state of the hardware
- * registers. Returns... -2 if reads worked, but register values don't match
- * defaults. -1 if a register read failed. 0  if we found an MCP356x.
+/**
+ * @brief Refreshes the internal register shadows with the state of the hardware registers.
+ *
+ * This function performs a full refresh of the register shadows, updating them to match the
+ * current state of the MCP356x's hardware registers.
+ *
+ * @return int8_t
+ *         - -2 if reads were successful but register values don't match defaults.
+ *         - -1 if a register read failed.
+ *         - 0 if an MCP356x was successfully identified.
  */
 int8_t MCP356x::refresh() {
     uint8_t i   = 0;
@@ -888,20 +1116,26 @@ int8_t MCP356x::refresh() {
     return ret;
 }
 
-/*
- * Causes the ADC to throw away samples after reading them. This should be
- *   invoked when it is known that the analog value is changing, and we only
- * want reports of fully-settled values.
+/**
+ * @brief Discards samples that are not fully settled.
+ *
+ * When the analog value is changing, this function can be invoked to ensure only fully-settled
+ * values are reported by the ADC, discarding any readings taken during the settling period.
  */
 void MCP356x::discardUnsettledSamples() {
     _discard_until_micros = getSettlingTime() * 1000 + _circuit_settle_us + micros();
 }
 
-/*
- * Sends a fast command that is not register access.
- * Returns...
- *    -1 on failure to write SPI.
- *    0  on success.
+/**
+ * @brief Sends a non-register access fast command to the MCP356x.
+ *
+ * This function is used for sending fast commands that don't involve direct register access.
+ *
+ * @param cmd The fast command to send.
+ *
+ * @return int8_t
+ *         - -1 on failure to write SPI.
+ *         - 0 on success.
  */
 int8_t MCP356x::_send_fast_command(uint8_t cmd) {
     int8_t ret = 0;
@@ -913,14 +1147,21 @@ int8_t MCP356x::_send_fast_command(uint8_t cmd) {
     return ret;
 }
 
-/*
- * Sets the list of channels to read in SCAN mode.
- * Returns...
- *   -4 if a channel was requested that the driver doesn't support.
- *   -3 if a channel was requested that the hardware doesn't support.
- *   -2 if no channels were given.
- *   -1 on failure to write the SCAN register.
- *   0  on success.
+/**
+ * @brief Sets the list of channels to be read in SCAN mode.
+ *
+ * This function configures which channels are to be read by the MCP356x in SCAN mode. It checks 
+ * for channel support and handles errors accordingly.
+ *
+ * @param count The number of channels to set.
+ * @param ... Variable arguments representing the channels to set.
+ *
+ * @return int8_t
+ *         - -4 if an unsupported channel was requested.
+ *         - -3 if a requested channel is not supported by the hardware.
+ *         - -2 if no channels were provided.
+ *         - -1 on failure to write the SCAN register.
+ *         - 0 on success.
  */
 int8_t MCP356x::setScanChannels(int count, ...) {
     int8_t   ret           = (count > 0) ? 0 : -2;
@@ -974,22 +1215,40 @@ int8_t MCP356x::setScanChannels(int count, ...) {
     return ret;
 }
 
+/**
+ * @brief Helper function to set the scan channels in the SCAN register.
+ *
+ * @param rval The value to write to the SCAN register.
+ *
+ * @return int8_t Result of the register write operation.
+ */
 int8_t MCP356x::_set_scan_channels(uint32_t rval) {
     if (!_mcp356x_flag(MCP356X_FLAG_CALIBRATED)) { _channel_backup = reg_shadows[(uint8_t)MCP356xRegister::SCAN]; }
     return _write_register(MCP356xRegister::SCAN, (uint32_t)rval);
 }
 
-/*
- * Do we have data for all the channels we asked for?
+/**
+ * @brief Checks if the scan across the requested channels is complete.
+ *
+ * This function determines if data for all the channels requested in SCAN mode have been read.
+ *
+ * @return bool True if scanning is complete for all requested channels, false otherwise.
  */
 bool MCP356x::scanComplete() {
     uint32_t scan_chans = reg_shadows[(uint8_t)MCP356xRegister::SCAN] & 0x0000FFFF;
     return (scan_chans == (_channel_flags & scan_chans));
 };
 
-/*
- * Some hardware arrangements don't use a rail-to-rail Vref. So this function
- *   can be called from the application to manually define it.
+/**
+ * @brief Sets the reference voltage range for the MCP356x.
+ *
+ * This function allows manual definition of the reference voltage range, useful for hardware
+ * arrangements that do not use a rail-to-rail Vref.
+ *
+ * @param plus The positive reference voltage.
+ * @param minus The negative reference voltage.
+ *
+ * @return int8_t Always returns 0, indicating the reference range was set successfully.
  */
 int8_t MCP356x::setReferenceRange(float plus, float minus) {
     _vref_plus  = plus;
@@ -998,9 +1257,13 @@ int8_t MCP356x::setReferenceRange(float plus, float minus) {
     return 0;
 }
 
-/*
- * Runs the current temperature value through the temperature transfer function
- *   to arrive at the die temperature. Uses the high-accuracy third-order fit.
+/**
+ * @brief Calculates the temperature from the ADC's temperature channel.
+ *
+ * This function reads the current temperature value from the ADC and converts it to
+ * the die temperature using a high-accuracy third-order fit.
+ *
+ * @return float The calculated temperature.
  */
 float MCP356x::getTemperature() {
     int32_t t_lsb = value(MCP356xChannel::TEMP);
@@ -1021,26 +1284,31 @@ float MCP356x::getTemperature() {
  * Hardware discovery functions
  *******************************************************************************/
 
-/*
- * The maximum ADC input clock is between 1MHz and 20MHz.
+/**
+ * @brief Checks if the MCLK frequency is within operational boundaries.
  *
- * Returns true if MCLK (as measured) if within operational boundaries.
+ * This function verifies if the measured MCLK frequency is within the operational range
+ * of 1MHz to 20MHz.
+ *
+ * @return bool True if MCLK is within bounds, false otherwise.
  */
 bool MCP356x::_mclk_in_bounds() {
     bool inBounds = (_mclk_freq > 1000000.0) && (_mclk_freq < 20000000.0);
     return inBounds;
 }
 
-/*
- * Some designs drive the ADC from an on-board high-Q oscillator. But there is
- * no direct firmware means to discover the setting.
- * This function discovers the frequency by timing ADC reads with known clocking
- * parameters and reports the result; storing the answer in the class variable
- * _mclk_freq. Returns... -3 if the class isn't ready for this measurement. -2
- * if measurement timed out. -1 if there was some mechanical problem
- * communicating with the ADC 0  if a clock signal within expected range was
- * determined 1  if we got a clock rate that was out of bounds or appears
- * nonsensical
+/**
+ * @brief Detects the ADC input clock frequency.
+ *
+ * This function measures the ADC reads timing with known clocking parameters to discover
+ * the MCLK frequency. It stores the result in _mclk_freq and recalculates the clock tree if necessary.
+ *
+ * @return int8_t
+ *         - -3 if the class isn't ready for measurement.
+ *         - -2 if measurement timed out.
+ *         - -1 on mechanical problems communicating with the ADC.
+ *         - 0 if a clock signal within expected range was determined.
+ *         - 1 if the clock rate is out of bounds or nonsensical.
  */
 int8_t MCP356x::_detect_adc_clock() {
     const uint32_t SAMPLE_TIME_MAX = 200000000; // 200ms in microseconds
@@ -1078,14 +1346,15 @@ int8_t MCP356x::_detect_adc_clock() {
     return ret;
 }
 
-/*
- * After the ADC has been running for awhile, we can calculate the true rate of
- *   the input clock if we don't know it already.
- * NOTE: since the sample count doesn't reset when timing parameters are
- * altered, this only gives accurate results if the settings are unchanged from
- * init, or the caller has pinged resetReadCount() before taking the
- * measurement. See the example file for usage pattern. Returns The calculated
- * MCLK frequency
+/**
+ * @brief Calculates the true rate of the input clock.
+ *
+ * This function calculates the MCLK frequency based on elapsed time and ADC sampling parameters.
+ * It provides accurate results if the settings are unchanged from init or after resetReadCount() is called.
+ *
+ * @param elapsed_us Elapsed time in microseconds used for the calculation.
+ *
+ * @return double The calculated MCLK frequency.
  */
 double MCP356x::_calculate_input_clock(unsigned long elapsed_us) {
     uint32_t osr_idx = (reg_shadows[(uint8_t)MCP356xRegister::CONFIG1] & 0x0000003C) >> 2;
@@ -1098,11 +1367,14 @@ double MCP356x::_calculate_input_clock(unsigned long elapsed_us) {
     return (4 * (osr3 * osr1) * (1 << pre_val) * _drclk);
 }
 
-/*
- * Given MCLK, calculate DRCLK and store it locally.
- * Returns...
- *   -2 if MCLK frequency is out-of-bounds.
- *   0  if the calculation completed.
+/**
+ * @brief Recalculates the clock tree based on the MCLK frequency.
+ *
+ * This function recalculates the DRCLK based on the MCLK frequency and updates internal parameters.
+ *
+ * @return int8_t
+ *         - -2 if MCLK frequency is out-of-bounds.
+ *         - 0 if the calculation completed successfully.
  */
 int8_t MCP356x::_recalculate_clk_tree() {
     if (_mclk_in_bounds()) {
@@ -1114,11 +1386,13 @@ int8_t MCP356x::_recalculate_clk_tree() {
     return -2;
 }
 
-/*
- * Given our existing parameters, get the theoretical maximum settling time for
- *   the data. This does not account for the circuit, obviously. It is only the
- *   analytical guess based on the datasheet. It represents the minimum time
- *   that the program should delay for an accurate reading.
+/**
+ * @brief Calculates the maximum theoretical settling time for the data.
+ *
+ * This function calculates the settling time based on the current configuration, providing
+ * an analytical estimate based on the datasheet.
+ *
+ * @return int8_t Always returns 0, indicating successful calculation.
  */
 int8_t MCP356x::_recalculate_settling_time() {
     // Extract the OSR index from the CONFIG1
@@ -1137,11 +1411,15 @@ int8_t MCP356x::_recalculate_settling_time() {
     return 0;
 }
 
-/*
- * Reads the ADC channels that assist us with calibration.
- * Returns...
- *   -1 if some register I/O failed.
- *   0  if an offset calibration value was found and set.
+/**
+ * @brief Initiates the offset calibration process.
+ *
+ * This function sets up the ADC for offset calibration by configuring the scan channels and
+ * clearing the calibration flag.
+ *
+ * @return int8_t
+ *         - -1 if a register I/O operation failed.
+ *         - 0 if the offset calibration setup was successful.
  */
 int8_t MCP356x::_calibrate_offset() {
     _channel_backup = reg_shadows[(uint8_t)MCP356xRegister::SCAN];
@@ -1150,12 +1428,26 @@ int8_t MCP356x::_calibrate_offset() {
     return ret;
 }
 
+/**
+ * @brief Marks the ADC as calibrated.
+ *
+ * This function restores the scan channel settings and sets the calibrated flag upon successful calibration.
+ *
+ * @return int8_t Status of restoring the scan channel settings.
+ */
 int8_t MCP356x::_mark_calibrated() {
     int8_t ret = _set_scan_channels(_channel_backup);
     if (0 == ret) { _mcp356x_set_flag(MCP356X_FLAG_CALIBRATED); }
     return ret;
 }
 
+/**
+ * @brief Prints the current register values of the MCP356x.
+ *
+ * This function outputs the values of all the registers in the MCP356x to the provided StringBuilder.
+ *
+ * @param output Pointer to the StringBuilder to append the register values to.
+ */
 void MCP356x::printRegs(StringBuilder *output) {
     output->concatf("reg_shadows[0] (ADCDATA)     = 0x%08x\n", reg_shadows[0]);
     output->concatf("reg_shadows[1] (CONFIG0)     = 0x%02x\n", reg_shadows[1]);
@@ -1175,12 +1467,26 @@ void MCP356x::printRegs(StringBuilder *output) {
     output->concatf("reg_shadows[15] (CRCCFG)     = 0x%04x\n", reg_shadows[15]);
 }
 
+/**
+ * @brief Prints the pin configuration of the MCP356x.
+ *
+ * This function outputs the current IRQ, CS, and MCLK pin assignments to the provided StringBuilder.
+ *
+ * @param output Pointer to the StringBuilder to append the pin information to.
+ */
 void MCP356x::printPins(StringBuilder *output) {
     output->concatf("IRQ:   %u\n", _IRQ_PIN);
     output->concatf("CS:    %u\n", _CS_PIN);
     output->concatf("MCLK:  %u\n", _MCLK_PIN);
 }
 
+/**
+ * @brief Prints timing information of the MCP356x.
+ *
+ * This function outputs various timing parameters such as MCLK, DMCLK, data rate, sample rate, and settling times.
+ *
+ * @param output Pointer to the StringBuilder to append the timing information to.
+ */
 void MCP356x::printTimings(StringBuilder *output) {
     output->concatf("\tMCLK                = %.4f MHz\n", _mclk_freq / 1000000.0);
     output->concatf("\tDMCLK               = %.4f MHz\n", _dmclk_freq / 1000000.0);
@@ -1191,6 +1497,14 @@ void MCP356x::printTimings(StringBuilder *output) {
     output->concatf("\tLast read (micros)  = %u\n", micros_last_read);
 }
 
+/**
+ * @brief Prints detailed data and status information of the MCP356x.
+ *
+ * This function outputs a comprehensive set of information including device model, channel count, clock status,
+ * calibration status, CRC error status, and more.
+ *
+ * @param output Pointer to the StringBuilder to append the data information to.
+ */
 void MCP356x::printData(StringBuilder *output) {
     StringBuilder prod_str("MCP356");
     if (adcFound()) {
@@ -1236,15 +1550,26 @@ void MCP356x::printData(StringBuilder *output) {
     }
 }
 
-/*
- * Prints a single channel.
+/**
+ * @brief Prints information about a specific ADC channel.
+ *
+ * This function outputs the voltage value and over-range status for a specified ADC channel.
+ *
+ * @param chan The channel to print information about.
+ * @param output Pointer to the StringBuilder to append the channel information to.
  */
 void MCP356x::printChannel(MCP356xChannel chan, StringBuilder *output) {
     output->concatf("%s:\t%.6fv\t%s\n", CHAN_NAMES[((uint8_t)chan) & 0x0F], valueAsVoltage(chan), _channel_over_range(chan) ? "OvR" : " ");
 }
 
-/*
- * Prints the values of all enabled channels.
+/**
+ * @brief Prints the values of all enabled channels.
+ *
+ * This function iterates over all channels and outputs their values. It can display
+ * the values either as raw ADC readings or in voltage format.
+ *
+ * @param output Pointer to the StringBuilder to append channel values to.
+ * @param asVoltage Boolean flag to select display format (true for voltage).
  */
 void MCP356x::printChannelValues(StringBuilder *output, bool asVoltage) {
     // Iterate over all possible channel enum values

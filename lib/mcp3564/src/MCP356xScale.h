@@ -3,76 +3,66 @@
 
 #include "MCP356x.h"
 
-class MCP356xScale : public MCP356x {
+// Enumerations
+enum class ScaleConversionMode : uint8_t {
+    UNDEFINED,
+    SINGLE_VALUE,
+    LINEAR,
+    POLYNOMIAL
+};
+
+class MCP356xScale {
+
+  static const int MAX_SCALES = 12; // Maximum number of scales supported
+    MCP356x* adcDevices[MAX_SCALES]; // Array to hold pointers to MCP356x instances
+    MCP356xChannel channels[MAX_SCALES]; // Array to hold channel assignments for each scale
 
   public:
-    static const MCP356xChannel A = MCP356xChannel::DIFF_A;
-    static const MCP356xChannel B = MCP356xChannel::DIFF_B;
-    static const MCP356xChannel C = MCP356xChannel::DIFF_C;
-    static const MCP356xChannel D = MCP356xChannel::DIFF_D;
-    
+    MCP356x       *adcDevice;   // Pointer to the MCP356x device
+    MCP356xChannel usedChannel; // The channel used by this scale
+
     // Constructor
-    MCP356xScale(const MCP356xConfig &config) : MCP356x(config){};
-    // Enumerations
-    enum class ScaleConversionMode : uint8_t {
-        UNDEFINED,
-        SINGLE_VALUE,
-        LINEAR,
-        POLYNOMIAL
-    };
-    // Initialization
-    void setupADC(SPIClass *spiInterface, int numChannels, MCP356xOversamplingRatio osr);
-    void configureChannels(int numChannels);
+    MCP356xScale(MCP356x *adc, MCP356xChannel channel);
 
     // Calibration Functions
-    void setConversionMode(MCP356xChannel channel, ScaleConversionMode mode);
-    void setScaleFactor(MCP356xChannel channel, float scale);
-    void setLinearCalibration(MCP356xChannel channel, float slope, float intercept);
-    void setPolynomialCalibration(MCP356xChannel channel, float a, float b, float c);
-    void tare(MCP356xChannel channel);
+    void setConversionMode(ScaleConversionMode mode);
+    void setScaleFactor(float scale);
+    void setLinearCalibration(float slope, float intercept);
+    void setPolynomialCalibration(float a, float b, float c);
+    void tare();
 
     // Reading Functions
-    int32_t getDigitalValue(MCP356xChannel channel);
-    int32_t getCalibratedValue(MCP356xChannel channel);
-    float   getGramsForce(MCP356xChannel channel);
-    float   getForce(MCP356xChannel channel);
-    int32_t getAverageValue(MCP356xChannel channel, int samples);
-    void    getMultipleChannelAverage(int times, MCP356xChannel channels[], int32_t *averages, size_t num_channels);
+    int32_t getDigitalValue();
+    int32_t getCalibratedValue();
+    float   getGramsForce();
+    float   getForce();
+    int32_t getAverageValue(int samples);
 
     // Force Conversion Methods
-    float convertToSingleValueForce(MCP356xChannel channel);
-    float convertToLinearForce(MCP356xChannel channel);
-    float convertToPolynomialForce(MCP356xChannel channel);
+    float convertToSingleValueForce();
+    float convertToLinearForce();
+    float convertToPolynomialForce();
 
     // Configuration and Setup
-    void setReadingOffset(MCP356xChannel channel, int32_t offset);
+    void setReadingOffset(int32_t offset);
 
     // Calibration and reading methods
-    int32_t getReadingOffset(MCP356xChannel channel);
-    float   getScaleFactor(MCP356xChannel channel);
+    int32_t getReadingOffset();
+    float   getScaleFactor();
 
   private:
     static constexpr float GRAVITATIONAL_ACCELERATION = 9.81f; // m/s^2
 
-    static const int    NUM_CHANNELS                  = 4;
-    ScaleConversionMode _conversionMode[NUM_CHANNELS] = {
-        ScaleConversionMode::UNDEFINED,
-        ScaleConversionMode::UNDEFINED,
-        ScaleConversionMode::UNDEFINED,
-        ScaleConversionMode::UNDEFINED};
+    ScaleConversionMode _conversionMode = ScaleConversionMode::UNDEFINED;
 
     // Channel-specific settings
-    float _scale[NUM_CHANNELS]  = {1.0f, 1.0f, 1.0f, 1.0f};
-    int   _offset[NUM_CHANNELS] = {0, 0, 0, 0};
-    float _linearSlope[NUM_CHANNELS];
-    float _linearIntercept[NUM_CHANNELS];
-    float _polyA[NUM_CHANNELS];
-    float _polyB[NUM_CHANNELS];
-    float _polyC[NUM_CHANNELS];
-
-    // Utility Methods
-    int         channelToIndex(MCP356xChannel channel);
-    const char *channelToString(MCP356xChannel channel) const;
+    float _scale  = 0.0f;
+    int   _offset = 0;
+    float _linearSlope;
+    float _linearIntercept;
+    float _polyA;
+    float _polyB;
+    float _polyC;
 };
 
 #endif // MCP356X_SCALE_H

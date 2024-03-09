@@ -26,11 +26,12 @@ and printed, along with the total combined sample rate.
 #define ADC1_IRQ_PIN 5
 #define ADC2_IRQ_PIN 7
 
-#define MCLK_PIN 0
-
-MCP356x adc0(ADC0_IRQ_PIN, ADC0_CS_PIN, MCLK_PIN);
-MCP356x adc1(ADC1_IRQ_PIN, ADC1_CS_PIN, MCLK_PIN);
-MCP356x adc2(ADC2_IRQ_PIN, ADC2_CS_PIN, MCLK_PIN);
+MCP356xConfig adc0Config = {ADC0_IRQ_PIN, ADC0_CS_PIN};
+MCP356x       adc0(adc0Config);
+MCP356xConfig adc1Config = {ADC1_IRQ_PIN, ADC1_CS_PIN};
+MCP356x       adc1(adc0Config);
+MCP356xConfig adc2Config = {ADC2_IRQ_PIN, ADC2_CS_PIN};
+MCP356x       adc2(adc0Config);
 
 unsigned int sampleCount0 = 0;
 unsigned int sampleCount1 = 0;

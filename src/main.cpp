@@ -1,7 +1,7 @@
 #include "MCP356xScale.h"
 #include "MCP356x.h"
 
-/** @brief Pins Configuration */
+/** @brief common pins for all the ADC's */
 const uint8_t SDI_PIN         = 11;
 const uint8_t SDO_PIN         = 12;
 const uint8_t SCK_PIN         = 13;

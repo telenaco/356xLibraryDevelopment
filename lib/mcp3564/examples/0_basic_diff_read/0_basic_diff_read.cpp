@@ -15,9 +15,11 @@ channel is connected to the analog input voltage being to measure.
 #define SCK_PIN 13
 #define ADC_CS_PIN 2 // Chip select for ADC  
 #define ADC_IRQ_PIN 3 // Interrupt pin for ADC
-#define MCLK_PIN 0 // Clock input for ADC
 
-MCP356x adc0(ADC_IRQ_PIN, ADC_CS_PIN, MCLK_PIN);
+//MCP356x adc0(ADC_IRQ_PIN, ADC_CS_PIN, MCLK_PIN);
+
+MCP356xConfig adc0Config = {ADC_IRQ_PIN, ADC_CS_PIN};
+MCP356x       adc0(adc0Config);
 
 void setupADC(MCP356x &adc) {
   adc.setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
@@ -50,12 +52,9 @@ void loop() {
       // Get raw ADC value
       int32_t adc_value = adc0.value(MCP356xChannel::DIFF_A);
 
-      Serial.print("DIFF_A: ");
-      Serial.print(voltage); 
-      Serial.print(" V");
-      Serial.print(" (digital reading -> ");  
-      Serial.print(adc_value);
-      Serial.println(")"); 
+    char text[30];
+    snprintf(text, 30, "%lu, %f", adc_value, voltage);
+    Serial.println(text);
     }
   }
 }

@@ -8,7 +8,7 @@ const uint8_t SCK_PIN         = 13;
 
 // Configuration pins for the ADC
 MCP356xConfig adcConfig1 = {3, 2}; 
-MCP356xScale mcpScale1(adcConfig1);
+MCP356x mcpScale1(adcConfig1);
 
 /** Pins Configuration */
 const MCP356xChannel CHANNEL_A = MCP356xChannel::DIFF_A;
