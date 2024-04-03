@@ -3,66 +3,99 @@
 
 #include "MCP356x.h"
 
-// Enumerations
-enum class ScaleConversionMode : uint8_t {
+class MCP356xScale {
+public:
+  // Enumerations
+  enum class ConversionMode : uint8_t {
     UNDEFINED,
+    DIGITAL, 
     SINGLE_VALUE,
     LINEAR,
     POLYNOMIAL
-};
+  };
 
-class MCP356xScale {
+  // Constructor and destructor
+  MCP356xScale(int totalScales, int sckPin, int sdoPin, int sdiPin,
+    int irqPin1, int csPin1, int irqPin2 = -1, int csPin2 = -1, int irqPin3 = -1, int csPin3 = -1);
+  ~MCP356xScale();
 
-  static const int MAX_SCALES = 12; // Maximum number of scales supported
-    MCP356x* adcDevices[MAX_SCALES]; // Array to hold pointers to MCP356x instances
-    MCP356xChannel channels[MAX_SCALES]; // Array to hold channel assignments for each scale
+  // Configuration and setup
+  void   setupChannelMappings();
+  static MCP356xConfig defaultConfig;
 
-  public:
-    MCP356x       *adcDevice;   // Pointer to the MCP356x device
-    MCP356xChannel usedChannel; // The channel used by this scale
+  // ADC operations
+  int  updatedAdcReadings();
 
-    // Constructor
-    MCP356xScale(MCP356x *adc, MCP356xChannel channel);
+  void printADCsDebug();
+  void printAdcRawChannels();
+  void printReadsPerSecond();
+  void printChannelParameters();
 
-    // Calibration Functions
-    void setConversionMode(ScaleConversionMode mode);
-    void setScaleFactor(float scale);
-    void setLinearCalibration(float slope, float intercept);
-    void setPolynomialCalibration(float a, float b, float c);
-    void tare();
 
-    // Reading Functions
-    int32_t getDigitalValue();
-    int32_t getCalibratedValue();
-    float   getGramsForce();
-    float   getForce();
-    int32_t getAverageValue(int samples);
+  // Calibration functions
+  void setDigitalRead(int scaleIndex);
+  void setScaleFactor(int scaleIndex, float scale);
+  void setLinearCalibration(int scaleIndex, float slope, float intercept);
+  void setPolynomialCalibration(int scaleIndex, float a, float b, float c);
+  void tare(int scaleIndex);
 
-    // Force Conversion Methods
-    float convertToSingleValueForce();
-    float convertToLinearForce();
-    float convertToPolynomialForce();
+  // Reading functions
+  void     getAverageValues(int times);
+  float    getReading(int scaleIndex);
+  float    getForce(int scaleIndex);
+  float    getAverageValue(int scaleIndex);
+  int32_t  getRawValue(int scaleIndex);
+  uint32_t getReadCount(int adcIndex);
+  uint16_t getReadsPerSecond(int adcIndex);
 
-    // Configuration and Setup
-    void setReadingOffset(int32_t offset);
+  // Force conversion methods
+  int32_t convertToDigitalRead(int scaleIndex);
+  float convertToSingleValueForce(int scaleIndex);
+  float convertToLinearForce(int scaleIndex);
+  float convertToPolynomialForce(int scaleIndex);
 
-    // Calibration and reading methods
-    int32_t getReadingOffset();
-    float   getScaleFactor();
+private:
+  // Constants
+  static const int MAX_SCALES = 12;
+  static const int MAX_ADCS = 3;
+  static const int CHANNELS_PER_ADC = 4;
 
-  private:
-    static constexpr float GRAVITATIONAL_ACCELERATION = 9.81f; // m/s^2
+  // ADC and scale configuration
+  uint8_t _newDataFlags = 0;
 
-    ScaleConversionMode _conversionMode = ScaleConversionMode::UNDEFINED;
+    int      _totalScales;
+    int      _sckPin;
+    int      _sdoPin;
+    int      _sdiPin;
+    int      _irqPins[MAX_ADCS];
+    int      _csPins[MAX_ADCS];
+    MCP356x* _adcs[MAX_ADCS];
+    uint16_t _readsPerSecond[MAX_ADCS] = { 0 };
+    uint32_t _readAccumulator[MAX_ADCS] = { 0 };
+    uint32_t _microsLastWindow[MAX_ADCS] = { 0 };
 
-    // Channel-specific settings
-    float _scale  = 0.0f;
-    int   _offset = 0;
-    float _linearSlope;
-    float _linearIntercept;
-    float _polyA;
-    float _polyB;
-    float _polyC;
+  // Scale calibration parameters and conversion modes
+    struct ScaleConfig {
+      ConversionMode mode;
+      float          param1;
+      float          param2;
+      float          param3;
+      int32_t        offset;
+      int32_t        rawReading;
+      int            adcIndex;
+      MCP356xChannel channel;
+    };
+
+  ScaleConfig _scaleConfigs[MAX_SCALES];
+
+  static constexpr float GRAVITATIONAL_ACCELERATION = 9.81f; // m/s^2
 };
 
 #endif // MCP356X_SCALE_H
+
+
+//   
+
+//   int32_t getCalibratedValue(int scaleIndex, int32_t offset);
+//   float   getScaleFactor();
+

@@ -1,54 +1,71 @@
-#ifndef THREE_AXIS_LOAD_CELL_H
-#define THREE_AXIS_LOAD_CELL_H
+#ifndef MCP356X_3AXIS_H
+#define MCP356X_3AXIS_H
 
 #include "MCP356xScale.h"
+#include <BasicLinearAlgebra.h>
 
-// returns 3 readins on newton
-struct Newton3D {
-    float x;
-    float y;
-    float z;
+using namespace BLA;
+
+enum CalibrationType { NONE, MATRIX, POLYNOMIAL };
+
+struct PolynomialCoefficients {
+    float a0, a1, a2; // Coefficients for the polynomial: a0 + a1*x + a2*x^2
 };
 
-// returns 3 readings on gramsForce
-struct Force3D {
-    float x;
-    float y;
-    float z;
-};
-
-// returns 3 readings as the raw digital reading from the load cell
-struct Reading3D {
-    float x;
-    float y;
-    float z;
+struct Quaternion {
+    float w, x, y, z;
 };
 
 class MCP356x3axis {
-  public:
-    MCP356x3axis(MCP356xScale *xScale, MCP356xScale *yScale, MCP356xScale *zScale);
+public:
+    MCP356x3axis(MCP356xScale *scale, int xIndex, int yIndex, int zIndex);
     ~MCP356x3axis();
 
-    Reading3D digitalReading3D(); // Get raw digital readings
-    Force3D   ForceData3D();      // Get force data in grams
-    Newton3D  NewtonData3D();     // Get force data in Newtons
-    void      tareScales();       // Tare (zero) the scales
+    // Calibration functions
+    void setCalibrationMatrix(const Matrix<3, 3>& calibMatrix);
+    void setCalibrationPolynomial(const PolynomialCoefficients& xCoeffs, const PolynomialCoefficients& yCoeffs, const PolynomialCoefficients& zCoeffs);
+    void setAxisInversion(bool invertX, bool invertY, bool invertZ);
 
-    // Set and Get Calibration Coefficients
-    void setCalibrationCoefficients(const float coeffsX[3], const float coeffsY[3], const float coeffsZ[3]);
-    void getCalibrationCoefficients(float coeffsX[3], float coeffsY[3], float coeffsZ[3]);
+    void tare(int numReadings = 100); 
 
-  private:
-    MCP356xScale *xScale;
-    MCP356xScale *yScale;
-    MCP356xScale *zScale;
 
-    bool _isCalibrated = false;
+    Matrix<3, 3> getCalibrationMatrix();
+    Quaternion forceVectorToQuaternion(Matrix<3, 1> forceReading);
+
+    // Reading functions
+    Matrix<3, 1> getDigitalReading();
+    Matrix<3, 1> getGfReading();
+    Matrix<3, 1> getNewtonReading();
+
+    // Debug functions
+    void printLoadCellConfiguration();
+    void printADCReadings();
+    void printCalibrationMatrix();
+    void printGfReadings();
+    void printCalibrationDebugInfo();
+
+private:
+
+    static constexpr float GRAVITATIONAL_ACCELERATION = 9.81f; // m/s^2
+    
+    MCP356xScale* scale;
+    int xIndex;
+    int yIndex;
+    int zIndex;
+
+    bool isCalibrated;
+            // Axis inversion flags
+    bool invertX, invertY, invertZ;
+    CalibrationType calibrationType; // Added to distinguish between calibration types
+
+    Matrix<3, 1> tareOffsets;
+
+    Matrix<3, 3> calibrationMatrix;
+    PolynomialCoefficients xPolyCoeffs, yPolyCoeffs, zPolyCoeffs;
 
 
     // Utility functions
-    float    calculateForce(float reading, const float coeffs[3]); // Calculate force using polynomial coefficients
-    Newton3D convertToNewtons(const Force3D &force);               // Convert Force3D from grams to Newtons
+    Matrix<3, 1> convertToNewtons(const Matrix<3, 1> &forceVector);
 };
 
-#endif // THREE_AXIS_LOAD_CELL_H
+#endif // MCP356X_3AXIS_H
