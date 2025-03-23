@@ -1,8 +1,0 @@
-{
-    "cmake.sourceDirectory": "C:/Users/User/Documents/PlatformIO/Projects/356xLibraryDevelopment/lib/Arduino-Filters",
-    "files.associations": {
-        "*.cs": "csharp",
-        "system_error": "cpp",
-        "cmath": "cpp"
-    }
-}
