@@ -1,33 +1,34 @@
-  /**
- * Filename: loadcell_readings.cpp
+/**
+ * @file calibration_mcp356x_basic.cpp
+ * @brief Captures readings from MCP356x ADC for load cell calibration
  *
- * Description: 
- * This code captures readings from an MCP356x-based load cell. The readings
- * are filtered using a Butterworth filter to minimize noise and enhance precision.
- * The raw and filtered readings are then sent over the serial port for further processing.
+ * This program captures readings from an MCP356x-based load cell with Butterworth
+ * filtering to minimize noise and enhance precision. The raw and filtered readings
+ * are sent over the serial port for calibration purposes. It reads from the DIFF_A
+ * channel and applies filtering to stabilize the readings.
  *
- * Requirements: 
- * - MCP356x library
- * - Filters library
- *
- * Author: [Your Name]
- * Date  : [Date of Creation]
+ * Hardware Connections:
+ * - SDI_PIN: Connect to MCP356x SDI (Serial Data Input)
+ * - SDO_PIN: Connect to MCP356x SDO (Serial Data Output)
+ * - SCK_PIN: Connect to MCP356x SCK (Serial Clock Input)
+ * - ADC_CS_PIN: Connect to MCP356x CS (Chip Select)
+ * - ADC_IRQ_PIN: Connect to MCP356x IRQ (Interrupt Request)
  */
 #include "MCP356x.h"
 #include <Filters.h>
 #include <Filters/Butterworth.hpp>
 
-  // MCP356x Pin Configuration
+// MCP356x Pin Configuration
 #define SDI_PIN 11
 #define SDO_PIN 12
 #define SCK_PIN 13
 #define ADC_CS_PIN 2   // Chip select for ADC
 #define ADC_IRQ_PIN 3  // Interrupt for ADC
-#define MCLK_PIN 0     //
+#define MCLK_PIN 0     // Clock pin
 
 const MCP356xChannel LOADCELL_CHANNEL = MCP356xChannel::DIFF_A;
 
-  // Define the configuration for the MCP356x
+// Define the configuration for the MCP356x
 MCP356xConfig config = {
     .irq_pin      = ADC_IRQ_PIN,                         // IRQ pin
     .cs_pin       = ADC_CS_PIN,                          // Chip select pin
@@ -42,7 +43,11 @@ MCP356xConfig config = {
 
 MCP356x* scale = nullptr;
 
-  // Function to set up the ADC
+/**
+ * @brief Set up the ADC with appropriate configuration
+ * 
+ * Configures the ADC to use internal clock and scan the loadcell channel
+ */
 void setupADC() {
     scale->setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
     scale->setScanChannels(1, LOADCELL_CHANNEL);
@@ -60,7 +65,7 @@ void setup() {
 }
 
 // Butterworth Filter Configuration
-constexpr double SAMPLING_FREQUENCY = 11000;  // since are taking a sample every ~90 uSeconds freq is 1/T
+constexpr double SAMPLING_FREQUENCY = 11000;  // since we are taking a sample every ~90 µSeconds
 constexpr double CUT_OFF_FREQUENCY = 48;
 constexpr double NORMALIZED_CUT_OFF = 2 * CUT_OFF_FREQUENCY / SAMPLING_FREQUENCY;
 auto butterworthFilter = butter<1>(NORMALIZED_CUT_OFF);
