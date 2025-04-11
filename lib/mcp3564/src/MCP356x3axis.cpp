@@ -24,15 +24,15 @@
   * @param zIndex Index of the Z-axis channel
   */
  MCP356x3axis::MCP356x3axis(MCP356xScale* scale, int xIndex, int yIndex, int zIndex)
-     : invertX(false), invertY(false), invertZ(false),
-     scale(scale), xIndex(xIndex), yIndex(yIndex), zIndex(zIndex),
-     isCalibrated(false), calibrationType(NONE) {
+     : _invertX(false), _invertY(false), _invertZ(false),
+     _scale(scale), _xIndex(xIndex), _yIndex(yIndex), _zIndex(zIndex),
+     _isCalibrated(false), _calibrationType(NONE) {
      
      // Initialize calibration matrix to identity matrix
-     calibrationMatrix = Identity<3, 3>();
+     _calibrationMatrix = Identity<3, 3>();
      
      // Initialize tare offsets to zero
-     tareOffsets = {0, 0, 0};
+     _tareOffsets = {0, 0, 0};
  }
  
  /**
@@ -55,9 +55,9 @@
   * @param calibMatrix The 3x3 calibration matrix
   */
  void MCP356x3axis::setCalibrationMatrix(const Matrix<3, 3>& calibMatrix) {
-     calibrationMatrix = calibMatrix;
-     isCalibrated = true;
-     calibrationType = MATRIX;
+     _calibrationMatrix = calibMatrix;
+     _isCalibrated = true;
+     _calibrationType = MATRIX;
  }
  
  /**
@@ -67,7 +67,7 @@
   */
  Matrix<3, 3> MCP356x3axis::getCalibrationMatrix()
  {
-     return calibrationMatrix;
+     return _calibrationMatrix;
  }
  
  /**
@@ -77,9 +77,9 @@
   */
  Matrix<3, 1> MCP356x3axis::getDigitalReading() {
      Matrix<3, 1> reading;
-     reading(0) = scale->getReading(xIndex);
-     reading(1) = scale->getReading(yIndex);
-     reading(2) = scale->getReading(zIndex);
+     reading(0) = _scale->getReading(_xIndex);
+     reading(1) = _scale->getReading(_yIndex);
+     reading(2) = _scale->getReading(_zIndex);
      return reading;
  }
  
@@ -94,9 +94,9 @@
   * @param invertZ Whether to invert the Z-axis
   */
  void MCP356x3axis::setAxisInversion(bool invertX, bool invertY, bool invertZ) {
-     this->invertX = invertX;
-     this->invertY = invertY;
-     this->invertZ = invertZ;
+     _invertX = invertX;
+     _invertY = invertY;
+     _invertZ = invertZ;
  }
  
  /**
@@ -111,11 +111,11 @@
  void MCP356x3axis::setCalibrationPolynomial(const PolynomialCoefficients& xCoeffs, 
                                             const PolynomialCoefficients& yCoeffs, 
                                             const PolynomialCoefficients& zCoeffs) {
-     xPolyCoeffs = xCoeffs;
-     yPolyCoeffs = yCoeffs;
-     zPolyCoeffs = zCoeffs;
-     isCalibrated = true;
-     calibrationType = POLYNOMIAL;
+     _xPolyCoeffs = xCoeffs;
+     _yPolyCoeffs = yCoeffs;
+     _zPolyCoeffs = zCoeffs;
+     _isCalibrated = true;
+     _calibrationType = POLYNOMIAL;
  }
  
  /**
@@ -128,7 +128,7 @@
  void MCP356x3axis::tare(int numReadings) {
      // Ensure the scale is zeroed out at the hardware level
      Matrix<3, 1> sumReadings = {0, 0, 0};
-     tareOffsets = {0, 0, 0};
+     _tareOffsets = {0, 0, 0};
  
      for (int i = 0; i < numReadings; ++i) {
          auto reading = this->getGfReading(); 
@@ -137,7 +137,7 @@
      
      // Calculate the average and store it in tareOffsets
      for (int i = 0; i < 3; i++) {
-         this->tareOffsets(i) = sumReadings(i) / numReadings;
+         _tareOffsets(i) = sumReadings(i) / numReadings;
      }
  }
  
@@ -151,28 +151,28 @@
   */
  Matrix<3, 1> MCP356x3axis::getGfReading() {
      Matrix<3, 1> digitalReading = getDigitalReading();
-     if (!isCalibrated) return digitalReading;
+     if (!_isCalibrated) return digitalReading;
  
      Matrix<3, 1> calibratedReading = Identity<3, 1>();
  
-     if (calibrationType == MATRIX) {
+     if (_calibrationType == MATRIX) {
          // Apply matrix calibration
-         calibratedReading = calibrationMatrix * digitalReading;
+         calibratedReading = _calibrationMatrix * digitalReading;
      }
-     else if (calibrationType == POLYNOMIAL) {
+     else if (_calibrationType == POLYNOMIAL) {
          // Apply polynomial calibration directly for each axis using stored coefficients
-         calibratedReading(0) = xPolyCoeffs.a0 + xPolyCoeffs.a1 * digitalReading(0) + xPolyCoeffs.a2 * digitalReading(0) * digitalReading(0);
-         calibratedReading(1) = yPolyCoeffs.a0 + yPolyCoeffs.a1 * digitalReading(1) + yPolyCoeffs.a2 * digitalReading(1) * digitalReading(1);
-         calibratedReading(2) = zPolyCoeffs.a0 + zPolyCoeffs.a1 * digitalReading(2) + zPolyCoeffs.a2 * digitalReading(2) * digitalReading(2);
+         calibratedReading(0) = _xPolyCoeffs.a0 + _xPolyCoeffs.a1 * digitalReading(0) + _xPolyCoeffs.a2 * digitalReading(0) * digitalReading(0);
+         calibratedReading(1) = _yPolyCoeffs.a0 + _yPolyCoeffs.a1 * digitalReading(1) + _yPolyCoeffs.a2 * digitalReading(1) * digitalReading(1);
+         calibratedReading(2) = _zPolyCoeffs.a0 + _zPolyCoeffs.a1 * digitalReading(2) + _zPolyCoeffs.a2 * digitalReading(2) * digitalReading(2);
      }
  
      // Apply tare offsets
-     calibratedReading -= this->tareOffsets;
+     calibratedReading -= _tareOffsets;
  
      // Apply axis inversion if set
-     if (invertX) calibratedReading(0) = -calibratedReading(0);
-     if (invertY) calibratedReading(1) = -calibratedReading(1);
-     if (invertZ) calibratedReading(2) = -calibratedReading(2);
+     if (_invertX) calibratedReading(0) = -calibratedReading(0);
+     if (_invertY) calibratedReading(1) = -calibratedReading(1);
+     if (_invertZ) calibratedReading(2) = -calibratedReading(2);
  
      return calibratedReading;
  }
@@ -264,11 +264,11 @@
  void MCP356x3axis::printLoadCellConfiguration() {
      StringBuilder output;
      output.concat("Load Cell Configuration:\n");
-     output.concatf("X Index: %d\n", xIndex);
-     output.concatf("Y Index: %d\n", yIndex);
-     output.concatf("Z Index: %d\n", zIndex);
+     output.concatf("X Index: %d\n", _xIndex);
+     output.concatf("Y Index: %d\n", _yIndex);
+     output.concatf("Z Index: %d\n", _zIndex);
      output.concat("Is Calibrated: ");
-     output.concat(isCalibrated ? "Yes\n" : "No\n");
+     output.concat(_isCalibrated ? "Yes\n" : "No\n");
      Serial.println((char*)output.string());
  }
  
@@ -312,7 +312,7 @@
      output.concat("Calibration Matrix:\n");
      for (int row = 0; row < 3; ++row) {
          for (int col = 0; col < 3; ++col) {
-             output.concatf("%.2e\t", calibrationMatrix(row, col));
+             output.concatf("%.2e\t", _calibrationMatrix(row, col));
          }
          output.concat("\n");
      }
@@ -329,13 +329,13 @@
      Matrix<3, 1> digitalReading = getDigitalReading();
  
      // Calculate using matrix calibration
-     Matrix<3, 1> matrixCalibratedReading = calibrationMatrix * digitalReading;
+     Matrix<3, 1> matrixCalibratedReading = _calibrationMatrix * digitalReading;
  
      // Calculate using polynomial calibration
      Matrix<3, 1> polynomialCalibratedReading;
-     polynomialCalibratedReading(0) = xPolyCoeffs.a0 + xPolyCoeffs.a1 * digitalReading(0) + xPolyCoeffs.a2 * digitalReading(0) * digitalReading(0);
-     polynomialCalibratedReading(1) = yPolyCoeffs.a0 + yPolyCoeffs.a1 * digitalReading(1) + yPolyCoeffs.a2 * digitalReading(1) * digitalReading(1);
-     polynomialCalibratedReading(2) = zPolyCoeffs.a0 + zPolyCoeffs.a1 * digitalReading(2) + zPolyCoeffs.a2 * digitalReading(2) * digitalReading(2);
+     polynomialCalibratedReading(0) = _xPolyCoeffs.a0 + _xPolyCoeffs.a1 * digitalReading(0) + _xPolyCoeffs.a2 * digitalReading(0) * digitalReading(0);
+     polynomialCalibratedReading(1) = _yPolyCoeffs.a0 + _yPolyCoeffs.a1 * digitalReading(1) + _yPolyCoeffs.a2 * digitalReading(1) * digitalReading(1);
+     polynomialCalibratedReading(2) = _zPolyCoeffs.a0 + _zPolyCoeffs.a1 * digitalReading(2) + _zPolyCoeffs.a2 * digitalReading(2) * digitalReading(2);
  
      // Print formatted string
      char text[512];
