@@ -4,22 +4,22 @@ Simple examples demonstrating fundamental operations of the MCP356x ADC family.
 
 ## Example Files
 
-### mcp356x_basic_differential_reading.cpp
-Reads a differential channel from the ADC and displays voltage and raw values every 5 seconds.
+### basic_differential_reading.cpp
+Reads a differential channel from the ADC and displays voltage and raw values.
 
-### mcp356x_multiple_adc_sampling.cpp
-Shows how to configure and read from multiple MCP356x ADCs simultaneously, with sampling rate measurement.
+### multiple_adc_sampling.cpp
+Shows how to configure and read from multiple MCP356x ADCs simultaneously.
 
-### mcp356x_multiple_channel_operations.cpp
-Demonstrates scanning and reading multiple channels on multiple ADCs.
+### multiple_channel_operations.cpp
+Demonstrates scanning and reading multiple channels on a single ADC.
 
-### mcp356x_register_operations.cpp
+### register_operations.cpp
 Provides access to register-level operations with an interactive command interface.
 
-### mcp356x_sampling_rate_measurement.cpp
+### sampling_rate_measurement.cpp
 Measures ADC conversion time and calculates actual samples per second.
 
-### mcp356x_single_channel_operations.cpp
+### single_channel_operations.cpp
 Minimal example focused on reading a single ADC channel continuously.
 
 ## Hardware Setup
@@ -34,9 +34,9 @@ Default pin configuration:
 For multi-ADC examples:
 | ADC | CS Pin | IRQ Pin |
 |-----|--------|---------|
-| ADC0/1 | 7 | 6 |
-| ADC1/2 | 4 | 5 |
-| ADC2/3 | 2 | 3 |
+| ADC0 | 7 | 6 |
+| ADC1 | 4 | 5 |
+| ADC2 | 2 | 3 |
 
 ## Usage
 
