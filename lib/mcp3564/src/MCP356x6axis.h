@@ -1,114 +1,66 @@
 /**
  * @file MCP356x6axis.h
- * @brief MCP356x6axis class for implementing a 6-axis force/torque sensor using multiple 3-axis load cells.
- * 
- * This class provides functionality for integrating multiple 3-axis load cells into
- * a 6-axis force/torque sensor. It handles calibration, reading forces and torques,
- * and coordinate transformations.
- * 
+ * @brief MCP356x6axis class for interfacing with 6-axis force/torque sensors via MCP356x ADCs.
+ *
  * @author Jose Luis Berna Moya
  * @date March 2025
  */
 
-#ifndef SIX_AXIS_LOAD_CELL_H
-#define SIX_AXIS_LOAD_CELL_H
+#ifndef MCP356X_6AXIS_H
+#define MCP356X_6AXIS_H
 
 #include "MCP356x3axis.h"
 
 /**
  * @class MCP356x6axis
- * @brief Class for implementing a 6-axis force/torque sensor using multiple 3-axis load cells.
- * 
- * This class combines readings from four 3-axis load cells to calculate forces and torques
- * in all six degrees of freedom (Fx, Fy, Fz, Mx, My, Mz). It also provides calibration
- * capabilities for the combined sensor.
+ * @brief Class for creating a 6-axis force/torque sensor using four 3-axis load cells.
+ *
+ * This class combines readings from four 3-axis load cells to measure forces (Fx, Fy, Fz)
+ * and torques (Mx, My, Mz) in all six degrees of freedom.
  */
-class MCP356x6axis {
+class MCP356x6axis
+{
 public:
     /**
      * @brief Constructor for the MCP356x6axis class.
-     * 
-     * Initializes a 6-axis force/torque sensor using four 3-axis load cells.
-     * 
-     * @param loadCellA Pointer to the first 3-axis load cell
-     * @param loadCellB Pointer to the second 3-axis load cell
-     * @param loadCellC Pointer to the third 3-axis load cell
-     * @param loadCellD Pointer to the fourth 3-axis load cell
+     *
+     * @param loadCellA Pointer to the first load cell (typically front-left)
+     * @param loadCellB Pointer to the second load cell (typically front-right)
+     * @param loadCellC Pointer to the third load cell (typically back-right)
+     * @param loadCellD Pointer to the fourth load cell (typically back-left)
      * @param plateWidth Width of the mounting plate in meters
      * @param plateLength Length of the mounting plate in meters
      */
-    MCP356x6axis(MCP356x3axis* loadCellA, MCP356x3axis* loadCellB, 
-                MCP356x3axis* loadCellC, MCP356x3axis* loadCellD, 
-                float plateWidth, float plateLength);
-    
+    MCP356x6axis(MCP356x3axis *loadCellA, MCP356x3axis *loadCellB,
+                 MCP356x3axis *loadCellC, MCP356x3axis *loadCellD,
+                 float plateWidth, float plateLength);
+
     /**
      * @brief Destructor for the MCP356x6axis class.
      */
     ~MCP356x6axis();
 
-    /**
-     * @brief Sets the calibration matrix for the 6-axis sensor.
-     * 
-     * The calibration matrix is a 6x6 matrix that transforms raw 6-axis readings
-     * into calibrated force and torque readings.
-     * 
-     * @param calibMatrix The 6x6 calibration matrix
-     */
-    void setCalibrationMatrix(const BLA::Matrix<6, 6>& calibMatrix);
-    
-    /**
-     * @brief Gets the current calibration matrix.
-     * 
-     * @return BLA::Matrix<6, 6> The current calibration matrix
-     */
-    BLA::Matrix<6, 6> getCalibrationMatrix();
-
-    /**
-     * @brief Reads raw force and torque values from the load cells.
-     * 
-     * Combines the readings from the four 3-axis load cells to calculate
-     * the raw forces and torques in all six axes.
-     * 
-     * @return BLA::Matrix<6, 1> Vector of raw force and torque values
-     *                          [Fx, Fy, Fz, Mx, My, Mz]
-     */
+    void setCalibrationMatrix(const BLA::Matrix<6, 6> &calibMatrix);
     BLA::Matrix<6, 1> readRawForceAndTorque();
-    
-    /**
-     * @brief Reads calibrated force and torque values from the load cells.
-     * 
-     * Applies the calibration matrix to the raw force and torque readings
-     * to obtain calibrated values.
-     * 
-     * @return BLA::Matrix<6, 1> Vector of calibrated force and torque values
-     *                          [Fx, Fy, Fz, Mx, My, Mz]
-     */
     BLA::Matrix<6, 1> readCalibratedForceAndTorque();
-
-    /**
-     * @brief Performs a tare operation on all load cells.
-     * 
-     * Sets the current readings as the zero point for all load cells.
-     */
-    void tare();
-    
-    /**
-     * @brief Resets the calibration for all load cells and the 6-axis sensor.
-     * 
-     * Clears all calibration data and returns to uncalibrated state.
-     */
+    void tare(int numReadings = 100);
     void reset();
 
+    void printCalibrationMatrix();
+    void printForceAndTorque();
+    void printLoadCellConfiguration();
+
 private:
-    MCP356x3axis* _loadCellA;  ///< Pointer to the first 3-axis load cell
-    MCP356x3axis* _loadCellB;  ///< Pointer to the second 3-axis load cell
-    MCP356x3axis* _loadCellC;  ///< Pointer to the third 3-axis load cell
-    MCP356x3axis* _loadCellD;  ///< Pointer to the fourth 3-axis load cell
+    MCP356x3axis *_loadCellA; // Pointer to the first load cell (front-left)
+    MCP356x3axis *_loadCellB; // Pointer to the second load cell (front-right)
+    MCP356x3axis *_loadCellC; // Pointer to the third load cell (back-right)
+    MCP356x3axis *_loadCellD; // Pointer to the fourth load cell (back-left)
 
-    float _plateWidth;         ///< Width of the mounting plate in meters
-    float _plateLength;        ///< Length of the mounting plate in meters
+    float _plateWidth;  // Width of the mounting plate in meters
+    float _plateLength; // Length of the mounting plate in meters
+    bool _isCalibrated; // Whether the sensor is calibrated
 
-    BLA::Matrix<6, 6> _calibrationMatrix;  ///< Calibration matrix for the 6-axis sensor
+    BLA::Matrix<6, 6> _calibrationMatrix; // 6x6 calibration matrix
 };
 
-#endif // SIX_AXIS_LOAD_CELL_H
+#endif // MCP356X_6AXIS_H
