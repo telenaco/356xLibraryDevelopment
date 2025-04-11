@@ -13,115 +13,100 @@ This library provides a complete solution for working with load cells connected 
 
 ## Features
 
-- Support for multiple MCP356x ADCs (up to 3)
-- Support for multiple load cells (up to 12)
-- Multiple calibration methods:
+- **Extensive ADC Support**
+  - Compatible with MCP3561, MCP3562, and MCP3564 ADCs
+  - Support for multiple MCP356x ADCs (up to 3)
+  - Support for multiple load cells (up to 12)
+
+- **Versatile Calibration Options**
   - Digital (raw readings)
   - Single value (scale factor)
   - Linear (ax + b)
   - Polynomial (ax² + bx + c)
-- Matrix-based calibration for 3-axis and 6-axis sensors
-- Tare functionality
-- Axis inversion
-- Conversion between grams-force and Newtons
-- Force vector to quaternion conversion (for visualization)
-- Comprehensive debug and print functions
+  - Matrix-based calibration for 3-axis and 6-axis sensors
+
+- **Comprehensive Data Processing**
+  - Tare functionality
+  - Axis inversion
+  - Conversion between grams-force and Newtons
+  - Force vector to quaternion conversion (for visualization)
+  - Integration with filtering libraries
+
+- **Advanced Features**
+  - Support for differential and single-ended measurements
+  - Temperature sensing with the internal temperature sensor
+  - Detailed debug and diagnostic functions
+  - Performance optimization options
+
+## Installation
+
+1. Download the library as a ZIP file from the repository
+2. In Arduino IDE: Sketch > Include Library > Add .ZIP Library...
+3. Select the downloaded ZIP file
+4. The library will be installed and available under "Contributed Libraries"
 
 ## Hardware Setup
 
-The library is designed to work with the following ADCs:
-- MCP3561
-- MCP3562
-- MCP3564
-
-Each ADC can support up to 4 differential channels, allowing you to connect:
-- Up to 12 single-axis load cells
-- Up to 4 3-axis load cells
-- One 6-axis force/torque sensor (using four 3-axis load cells)
+The library is designed to work with:
+- MCP3561 (2 differential channels)
+- MCP3562 (4 differential channels)
+- MCP3564 (8 differential channels or 4 differential + 8 single-ended)
 
 ### Pin Connections
 
 For each MCP356x ADC:
-- SDI: Serial Data Input
-- SDO: Serial Data Output
+- SDI: Serial Data Input (connect to MOSI pin)
+- SDO: Serial Data Output (connect to MISO pin)
 - SCK: Serial Clock Input
 - CS: Chip Select
 - IRQ: Interrupt Request (for data-ready signaling)
 
-## Class Documentation
+### Multiple ADC Setup
 
-### MCP356x
+For applications requiring more than 4 channels:
 
-This is the base class that handles direct communication with the MCP356x ADC via SPI.
-
-```cpp
-MCP356x(const MCP356xConfig& config);
+```
+MCU             ADC 1             ADC 2             ADC 3
+---------------------------------------------------------------------
+MOSI ---------> SDI -------------> SDI -------------> SDI
+MISO <--------- SDO <------------- SDO <------------- SDO
+SCK ----------> SCK -------------> SCK -------------> SCK
+GPIO 1 --------> CS
+GPIO 2 <-------- IRQ
+GPIO 3 -----------------------> CS
+GPIO 4 <----------------------- IRQ
+GPIO 5 ----------------------------------> CS
+GPIO 6 <---------------------------------- IRQ
 ```
 
-Key methods:
-- `int8_t init(SPIClass*)` - Initialize the ADC
-- `int updatedReadings()` - Check for and process updated ADC readings
-- `int32_t value(MCP356xChannel)` - Get the value for a specific channel
-- `double valueAsVoltage(MCP356xChannel)` - Get the voltage for a specific channel
-- `void printRegs(StringBuilder*)` - Print register contents
-- `void printData(StringBuilder*)` - Print ADC data and status
+## Library Architecture
 
-### MCP356xScale
+### Class Hierarchy
 
-This class manages multiple load cells connected to one or more MCP356x ADCs.
-
-```cpp
-MCP356xScale(int totalScales, int sckPin, int sdoPin, int sdiPin,
-             int irqPin1, int csPin1, int irqPin2 = -1, int csPin2 = -1, 
-             int irqPin3 = -1, int csPin3 = -1);
+```
+MCP356x (Base ADC Class)
+    |
+    ├── MCP356xScale (Load Cell Manager)
+    |       |
+    |       └── MCP356x3axis (3-Axis Load Cell)
+    |               |
+    |               └── MCP356x6axis (6-Axis Force/Torque Sensor)
+    |
+    └── (Other future extensions)
 ```
 
-Key methods:
-- `int updatedAdcReadings()` - Update ADC readings
-- `void setDigitalRead(int scaleIndex)` - Configure digital reading mode
-- `void setScaleFactor(int scaleIndex, float scale)` - Set simple scale factor
-- `void setLinearCalibration(int scaleIndex, float slope, float intercept)` - Set linear calibration
-- `void setPolynomialCalibration(int scaleIndex, float a, float b, float c)` - Set polynomial calibration
-- `void tare(int scaleIndex, int times = 1000)` - Tare the scale
-- `float getReading(int scaleIndex)` - Get calibrated reading
-- `float getForce(int scaleIndex)` - Get force in Newtons
+### Memory Requirements
 
-### MCP356x3axis
+| Class          | Flash Usage | RAM Usage |
+|----------------|-------------|-----------|
+| MCP356x        | ~4 KB       | ~150 bytes |
+| MCP356xScale   | ~2 KB       | ~450 bytes + 40 bytes per scale |
+| MCP356x3axis   | ~3 KB       | ~160 bytes |
+| MCP356x6axis   | ~2 KB       | ~180 bytes |
 
-This class provides functionality for 3-axis load cells.
+## Basic Usage
 
-```cpp
-MCP356x3axis(MCP356xScale* scale, int xIndex, int yIndex, int zIndex);
-```
-
-Key methods:
-- `void setCalibrationMatrix(const Matrix<3, 3>& calibMatrix)` - Set matrix calibration
-- `void setCalibrationPolynomial(const PolynomialCoefficients& xCoeffs, const PolynomialCoefficients& yCoeffs, const PolynomialCoefficients& zCoeffs)` - Set polynomial calibration
-- `void setAxisInversion(bool invertX, bool invertY, bool invertZ)` - Set axis inversion
-- `void tare(int numReadings = 100)` - Tare the load cell
-- `Matrix<3, 1> getDigitalReading()` - Get raw digital readings
-- `Matrix<3, 1> getGfReading()` - Get calibrated readings in grams-force
-- `Matrix<3, 1> getNewtonReading()` - Get readings in Newtons
-- `Quaternion forceVectorToQuaternion(Matrix<3, 1> forceReading)` - Convert force to quaternion
-
-### MCP356x6axis
-
-This class implements a 6-axis force/torque sensor using four 3-axis load cells.
-
-```cpp
-MCP356x6axis(MCP356x3axis* loadCellA, MCP356x3axis* loadCellB, MCP356x3axis* loadCellC, MCP356x3axis* loadCellD, float plateWidth, float plateLength);
-```
-
-Key methods:
-- `void setCalibrationMatrix(const BLA::Matrix<6, 6>& calibMatrix)` - Set 6-axis calibration matrix
-- `BLA::Matrix<6, 1> readRawForceAndTorque()` - Get raw force and torque readings
-- `BLA::Matrix<6, 1> readCalibratedForceAndTorque()` - Get calibrated force and torque readings
-- `void tare()` - Tare all load cells
-- `void reset()` - Reset all calibration data
-
-## Examples
-
-### Basic Load Cell Reading
+### Single Load Cell
 
 ```cpp
 #include <MCP356xScale.h>
@@ -137,14 +122,11 @@ MCP356xScale* mcpScale = nullptr;
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {
-    delay(10);
-  }
-
+  
   // Initialize with 1 scale
   mcpScale = new MCP356xScale(1, SCK_PIN, SDO_PIN, SDI_PIN, IRQ_PIN, CS_PIN);
   
-  // Set calibration factor (grams per ADC unit)
+  // Set calibration factor
   mcpScale->setScaleFactor(0, 0.0006f);
   
   // Tare the scale
@@ -161,7 +143,7 @@ void loop() {
 }
 ```
 
-### 3-Axis Load Cell Example
+### 3-Axis Load Cell
 
 ```cpp
 #include <MCP356x3axis.h>
@@ -216,7 +198,7 @@ void loop() {
 }
 ```
 
-### 6-Axis Force/Torque Sensor Example
+### 6-Axis Force/Torque Sensor
 
 ```cpp
 #include <MCP356x6axis.h>
@@ -254,17 +236,14 @@ void setup() {
   loadCell3 = new MCP356x3axis(mcpScale, 6, 7, 8);
   loadCell4 = new MCP356x3axis(mcpScale, 9, 10, 11);
   
-  // Set calibration for each load cell
-  // ... (calibration code here)
-  
   // Initialize the 6-axis force/torque sensor
   float plateWidth = 0.125;  // plate width in meters
   float plateLength = 0.125; // plate length in meters
   sixAxisLoadCell = new MCP356x6axis(loadCell1, loadCell2, loadCell3, loadCell4, 
                                     plateWidth, plateLength);
   
-  // Set the 6-axis calibration matrix
-  // ... (calibration code here)
+  // Set calibration and perform tare
+  // (calibration matrix code would go here)
 }
 
 void loop() {
@@ -290,10 +269,60 @@ void loop() {
 }
 ```
 
+## Example Folders
+
+The library includes multiple example folders for different applications:
+
+- **Basic**: Simple examples showing fundamental ADC operations
+- **Calibration**: Examples demonstrating different calibration techniques
+- **Comparison**: Benchmarks comparing MCP356x with HX711 ADCs
+- **Filtering**: Examples showing noise reduction techniques
+- **LoadCells**: Complete load cell interface examples
+- **Telemetry**: Data streaming for visualization and analysis
+
 ## Dependencies
 
 - [BasicLinearAlgebra](https://github.com/tomstewart89/BasicLinearAlgebra) - For matrix operations
 - Arduino SPI library
+
+## Troubleshooting
+
+### Common Issues
+
+1. **No readings or zero values**
+   - Check SPI connections
+   - Verify CS and IRQ pin configurations
+   - Ensure load cell is properly connected
+   - Check calibration factors
+
+2. **Noisy readings**
+   - Add capacitors to power lines
+   - Implement filtering (see Filtering examples)
+   - Check for mechanical vibrations
+   - Ensure stable power supply
+
+3. **Drift over time**
+   - Implement temperature compensation
+   - Use auto-tare for long-term operation
+   - Check for ADC reference voltage stability
+
+### Diagnostic Functions
+
+The library includes diagnostic functions for troubleshooting:
+
+```cpp
+// Print detailed ADC information
+mcpScale->printADCsDebug();
+
+// Print raw channel values
+mcpScale->printAdcRawChannels();
+
+// Print reading rate statistics
+mcpScale->printReadsPerSecond();
+
+// Print calibration parameters for all channels
+mcpScale->printChannelParameters();
+```
 
 ## License
 

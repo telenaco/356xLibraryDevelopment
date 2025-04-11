@@ -554,7 +554,7 @@ int8_t MCP356x::_proc_irq_register()
         }
         if (0x01 & irq_reg_data)
         { // Conversion started
-            // We don't configure the class this way, and don't observe the IRQ.
+          // We don't configure the class this way, and don't observe the IRQ.
         }
     }
     isr_fired = !digitalRead(_IRQ_PIN);

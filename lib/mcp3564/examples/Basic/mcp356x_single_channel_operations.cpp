@@ -27,32 +27,33 @@
 #define SDO_PIN 12
 #define SCK_PIN 13
 #define ADC_IRQ_PIN 3
-#define ADC_CS_PIN  2
+#define ADC_CS_PIN 2
 
 /**
  * @brief MCP356x ADC configuration structure
  */
 MCP356xConfig config = {
-    .irq_pin = ADC_IRQ_PIN,                            // Interrupt Request pin
-    .cs_pin = ADC_CS_PIN,                              // Chip Select pin
-    .mclk_pin = 0,                                     // Master Clock pin (0 for internal clock)
-    .addr = 0x01,                                      // Device address (GND in this case)
-    .spiInterface = &SPI,                              // SPI interface to use
-    .numChannels = 1,                                  // Number of channels to scan
-    .osr = MCP356xOversamplingRatio::OSR_32,           // Oversampling ratio
-    .gain = MCP356xGain::GAIN_1,                       // Gain setting (1x)
-    .mode = MCP356xADCMode::ADC_CONVERSION_MODE        // Continuous conversion mode
+    .irq_pin = ADC_IRQ_PIN,                     // Interrupt Request pin
+    .cs_pin = ADC_CS_PIN,                       // Chip Select pin
+    .mclk_pin = 0,                              // Master Clock pin (0 for internal clock)
+    .addr = 0x01,                               // Device address (GND in this case)
+    .spiInterface = &SPI,                       // SPI interface to use
+    .numChannels = 1,                           // Number of channels to scan
+    .osr = MCP356xOversamplingRatio::OSR_32,    // Oversampling ratio
+    .gain = MCP356xGain::GAIN_1,                // Gain setting (1x)
+    .mode = MCP356xADCMode::ADC_CONVERSION_MODE // Continuous conversion mode
 };
 
 // Pointer for dynamically created ADC object
-MCP356x* adc = nullptr;
+MCP356x *adc = nullptr;
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes SPI interface and the MCP356x ADC for single-channel operation.
  */
-void setup() {
+void setup()
+{
     // Initialize serial communication
     Serial.begin(115200);
 
@@ -68,13 +69,15 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously checks for new ADC readings, and when available,
  * retrieves and outputs both voltage and raw ADC values.
  */
-void loop() {
+void loop()
+{
     // Check if the ADC has new data available
-    if (adc->updatedReadings()) {
+    if (adc->updatedReadings())
+    {
         // Get voltage value from the differential channel A
         float voltage = adc->valueAsVoltage(MCP356xChannel::DIFF_A);
 

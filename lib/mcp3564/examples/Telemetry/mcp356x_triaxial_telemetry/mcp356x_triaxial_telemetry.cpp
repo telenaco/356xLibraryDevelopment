@@ -2,10 +2,10 @@
  * @file mcp356x_triaxial_telemetry.cpp
  * @brief Reads data from four 3-axis load cells and streams telemetry data.
  *
- * This program reads data from 12 channels (four 3-axis load cells) using the MCP356x3axis 
- * library and streams the calibrated force readings for visualization. The program 
- * continuously updates ADC readings, calculates average values over the specified sampling 
- * interval, and outputs the formatted data including quaternion orientation information 
+ * This program reads data from 12 channels (four 3-axis load cells) using the MCP356x3axis
+ * library and streams the calibrated force readings for visualization. The program
+ * continuously updates ADC readings, calculates average values over the specified sampling
+ * interval, and outputs the formatted data including quaternion orientation information
  * for each load cell.
  *
  * @author Jose Luis Berna Moya
@@ -43,48 +43,49 @@
 #define SAMPLE_INTERVAL 20 // Sample interval set to 20ms
 
 // Global variables
-MCP356xScale* mcpScale = nullptr;
-MCP356x3axis* loadCell1 = nullptr;
-MCP356x3axis* loadCell2 = nullptr;
-MCP356x3axis* loadCell3 = nullptr;
-MCP356x3axis* loadCell4 = nullptr;
+MCP356xScale *mcpScale = nullptr;
+MCP356x3axis *loadCell1 = nullptr;
+MCP356x3axis *loadCell2 = nullptr;
+MCP356x3axis *loadCell3 = nullptr;
+MCP356x3axis *loadCell4 = nullptr;
 
 // Variables for averaging
 unsigned int sampleCount = 0;
-Matrix<3, 1> totalReadings1 = { 0, 0, 0 };
-Matrix<3, 1> totalReadings2 = { 0, 0, 0 };
-Matrix<3, 1> totalReadings3 = { 0, 0, 0 };
-Matrix<3, 1> totalReadings4 = { 0, 0, 0 };
+Matrix<3, 1> totalReadings1 = {0, 0, 0};
+Matrix<3, 1> totalReadings2 = {0, 0, 0};
+Matrix<3, 1> totalReadings3 = {0, 0, 0};
+Matrix<3, 1> totalReadings4 = {0, 0, 0};
 
 /**
  * @brief Initialize calibration matrices for all load cells
- * 
+ *
  * Sets up the calibration matrices for each of the four 3-axis load cells.
  * These matrices transform raw ADC readings into calibrated force measurements.
  */
-void initializeCalibrationWithMatrices() {
+void initializeCalibrationWithMatrices()
+{
     BLA::Matrix<3, 3> calibMatrix1 = {
         -5.982118e-04, -6.398772e-06, 1.493637e-05,
         -1.610696e-05, 5.980800e-04, 1.154983e-05,
-        5.832123e-06, -5.437381e-06, 6.200539e-04 };
+        5.832123e-06, -5.437381e-06, 6.200539e-04};
 
     // For Load Cell 2
     BLA::Matrix<3, 3> calibMatrix2 = {
         5.981983e-04, -1.070736e-05, 7.760431e-06,
         2.589967e-06, 5.869149e-04, 6.217067e-06,
-        5.954714e-06, 1.355531e-05, 5.982035e-04 };
+        5.954714e-06, 1.355531e-05, 5.982035e-04};
 
     // For Load Cell 3
     BLA::Matrix<3, 3> calibMatrix3 = {
         -5.967505e-04, -1.410111e-05, -1.031143e-05,
         -1.276690e-05, 5.953475e-04, -4.933627e-06,
-        8.278846e-06, -1.064470e-05, -5.746296e-04 };
+        8.278846e-06, -1.064470e-05, -5.746296e-04};
 
     // For Load Cell 4
     BLA::Matrix<3, 3> calibMatrix4 = {
         -6.007485e-04, -1.092638e-05, -2.390023e-06,
         -1.328377e-05, 5.968730e-04, 5.299463e-06,
-        3.958772e-06, -7.053156e-06, 6.141198e-04 };
+        3.958772e-06, -7.053156e-06, 6.141198e-04};
 
     // Apply calibration matrices to load cells
     loadCell1->setCalibrationMatrix(calibMatrix1);
@@ -95,46 +96,49 @@ void initializeCalibrationWithMatrices() {
 
 /**
  * @brief Initialize polynomial calibration for all load cells
- * 
+ *
  * Sets up polynomial calibration coefficients for each axis of each load cell.
  * This provides an alternative calibration method to matrix calibration.
  */
-void initializeCalibrationWithPolynomial() {
+void initializeCalibrationWithPolynomial()
+{
     // Set Polynomial Calibration for Load Cell 1
     loadCell1->setCalibrationPolynomial(
-        { -4.779867e-12, -6.139373e-04, -2.828916e+02 }, // X Axis
-        { 1.063187e-11, 5.951776e-04, 3.592542e+02 },  // Y Axis
-        { -9.493906e-12, 6.244786e-04, -5.722137e+02 }); // Z Axis
+        {-4.779867e-12, -6.139373e-04, -2.828916e+02}, // X Axis
+        {1.063187e-11, 5.951776e-04, 3.592542e+02},    // Y Axis
+        {-9.493906e-12, 6.244786e-04, -5.722137e+02}); // Z Axis
 
     // Set Polynomial Calibration for Load Cell 2
     loadCell2->setCalibrationPolynomial(
-        { -7.213967e-13, 6.002052e-04, -1.517346e+02 }, // X Axis
-        { -7.526178e-12, 5.941050e-04, 3.217731e+02 },  // Y Axis
-        { 4.769434e-12, 5.964100e-04, -6.883740e+02 }  // Z Axis
-    ); 
+        {-7.213967e-13, 6.002052e-04, -1.517346e+02}, // X Axis
+        {-7.526178e-12, 5.941050e-04, 3.217731e+02},  // Y Axis
+        {4.769434e-12, 5.964100e-04, -6.883740e+02}   // Z Axis
+    );
 
     // Set Polynomial Calibration for Load Cell 3
     loadCell3->setCalibrationPolynomial(
-        { -5.842038e-12, -6.000414e-04, 4.924497e+02 }, // X Axis
-        { -3.809444e-12, 5.873697e-04, 4.065573e+02 },  // Y Axis
-        { 4.556780e-12, -5.611561e-04, -3.722284e+02 }); // Z Axis
+        {-5.842038e-12, -6.000414e-04, 4.924497e+02},  // X Axis
+        {-3.809444e-12, 5.873697e-04, 4.065573e+02},   // Y Axis
+        {4.556780e-12, -5.611561e-04, -3.722284e+02}); // Z Axis
 
     // Set Polynomial Calibration for Load Cell 4
     loadCell4->setCalibrationPolynomial(
-        { -8.463602e-13, -6.040589e-04, -1.973620e+01 }, // X Axis
-        { 4.519417e-12, 5.982422e-04, 5.351286e+02 },  // Y Axis
-        { 5.869018e-12, 5.996329e-04, -2.636953e+02 }); // Z Axis
+        {-8.463602e-13, -6.040589e-04, -1.973620e+01}, // X Axis
+        {4.519417e-12, 5.982422e-04, 5.351286e+02},    // Y Axis
+        {5.869018e-12, 5.996329e-04, -2.636953e+02});  // Z Axis
 }
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, the MCP356xScale instance,
  * and the MCP356x3axis objects. Applies calibration and performs a tare operation.
  */
-void setup() {
+void setup()
+{
     Serial.begin(115200);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
 
@@ -149,7 +153,7 @@ void setup() {
 
     // Choose calibration method (uncomment one of these lines)
     initializeCalibrationWithPolynomial();
-    //initializeCalibrationWithMatrices();
+    // initializeCalibrationWithMatrices();
 
     // Set axis inversion for proper orientation
     loadCell1->setAxisInversion(1, 0, 1);
@@ -165,15 +169,17 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously updates ADC readings, calculates average readings over the specified
  * sample interval, and sends formatted data including quaternion orientation.
  */
-void loop() {
+void loop()
+{
     static unsigned long lastSampleTime = 0;
 
     // Update the ADC readings from all connected load cells
-    if (mcpScale->updatedAdcReadings()) {
+    if (mcpScale->updatedAdcReadings())
+    {
         sampleCount++;
 
         // Accumulate the readings for each load cell
@@ -184,7 +190,8 @@ void loop() {
 
         unsigned long currentTime = millis();
 
-        if (currentTime - lastSampleTime >= SAMPLE_INTERVAL) {
+        if (currentTime - lastSampleTime >= SAMPLE_INTERVAL)
+        {
             lastSampleTime = currentTime;
 
             // Calculate the average readings for each load cell
@@ -193,7 +200,8 @@ void loop() {
             Matrix<3, 1> averageReadings3;
             Matrix<3, 1> averageReadings4;
 
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 3; i++)
+            {
                 averageReadings1(i) = totalReadings1(i) / sampleCount;
                 averageReadings2(i) = totalReadings2(i) / sampleCount;
                 averageReadings3(i) = totalReadings3(i) / sampleCount;
@@ -201,10 +209,10 @@ void loop() {
             }
 
             // Reset the total readings and sample count for the next interval
-            totalReadings1 = { 0, 0, 0 };
-            totalReadings2 = { 0, 0, 0 };
-            totalReadings3 = { 0, 0, 0 };
-            totalReadings4 = { 0, 0, 0 };
+            totalReadings1 = {0, 0, 0};
+            totalReadings2 = {0, 0, 0};
+            totalReadings3 = {0, 0, 0};
+            totalReadings4 = {0, 0, 0};
             sampleCount = 0;
 
             // Convert force vectors to quaternions for visualization
@@ -216,17 +224,16 @@ void loop() {
             // Format and output the data
             char text[512]; // Buffer for the formatted string
             snprintf(text, sizeof(text),
-                "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
-                (int)round(averageReadings1(0)), (int)round(averageReadings1(1)), (int)round(averageReadings1(2)),
-                (int)round(averageReadings2(0)), (int)round(averageReadings2(1)), (int)round(averageReadings2(2)),
-                (int)round(averageReadings3(0)), (int)round(averageReadings3(1)), (int)round(averageReadings3(2)),
-                (int)round(averageReadings4(0)), (int)round(averageReadings4(1)), (int)round(averageReadings4(2)),
-                // Quaternion components for each load cell to show force direction
-                q1.w, q1.x, q1.y, q1.z,
-                q2.w, q2.x, q2.y, q2.z,
-                q3.w, q3.x, q3.y, q3.z,
-                q4.w, q4.x, q4.y, q4.z
-            );
+                     "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+                     (int)round(averageReadings1(0)), (int)round(averageReadings1(1)), (int)round(averageReadings1(2)),
+                     (int)round(averageReadings2(0)), (int)round(averageReadings2(1)), (int)round(averageReadings2(2)),
+                     (int)round(averageReadings3(0)), (int)round(averageReadings3(1)), (int)round(averageReadings3(2)),
+                     (int)round(averageReadings4(0)), (int)round(averageReadings4(1)), (int)round(averageReadings4(2)),
+                     // Quaternion components for each load cell to show force direction
+                     q1.w, q1.x, q1.y, q1.z,
+                     q2.w, q2.x, q2.y, q2.z,
+                     q3.w, q3.x, q3.y, q3.z,
+                     q4.w, q4.x, q4.y, q4.z);
 
             Serial.println(text);
         }

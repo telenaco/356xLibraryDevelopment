@@ -33,7 +33,7 @@
 #define SDO_PIN 12
 #define SCK_PIN 13
 #define ADC_IRQ_PIN 6
-#define ADC_CS_PIN  7
+#define ADC_CS_PIN 7
 
 // Channel to read
 const MCP356xChannel LOADCELL_CHANNEL = MCP356xChannel::DIFF_A;
@@ -42,19 +42,19 @@ const MCP356xChannel LOADCELL_CHANNEL = MCP356xChannel::DIFF_A;
  * @brief MCP356x ADC configuration structure
  */
 MCP356xConfig config = {
-    .irq_pin = ADC_IRQ_PIN,                            // Interrupt Request pin
-    .cs_pin = ADC_CS_PIN,                              // Chip select pin
-    .mclk_pin = 0,                                     // Master Clock pin (0 for internal clock)
-    .addr = 0x01,                                      // Device address (GND in this case)
-    .spiInterface = &SPI,                              // SPI interface to use
-    .numChannels = 1,                                  // Number of channels to scan
-    .osr = MCP356xOversamplingRatio::OSR_32,           // Oversampling ratio
-    .gain = MCP356xGain::GAIN_1,                       // Gain setting (1x)
-    .mode = MCP356xADCMode::ADC_CONVERSION_MODE        // Continuous conversion mode
+    .irq_pin = ADC_IRQ_PIN,                     // Interrupt Request pin
+    .cs_pin = ADC_CS_PIN,                       // Chip select pin
+    .mclk_pin = 0,                              // Master Clock pin (0 for internal clock)
+    .addr = 0x01,                               // Device address (GND in this case)
+    .spiInterface = &SPI,                       // SPI interface to use
+    .numChannels = 1,                           // Number of channels to scan
+    .osr = MCP356xOversamplingRatio::OSR_32,    // Oversampling ratio
+    .gain = MCP356xGain::GAIN_1,                // Gain setting (1x)
+    .mode = MCP356xADCMode::ADC_CONVERSION_MODE // Continuous conversion mode
 };
 
 // Pointer for dynamically created ADC object
-MCP356x* scale = nullptr;
+MCP356x *scale = nullptr;
 
 // Buffer for custom running average filter
 const int BUFFER_SIZE = 50;
@@ -73,35 +73,43 @@ int runningSum = 0;
  * @param value The new value to be added to the running average calculation.
  * @return The current running average of the values in the buffer.
  */
-int computeRunningAverage(int value) {
-    if (bufferFull) {
+int computeRunningAverage(int value)
+{
+    if (bufferFull)
+    {
         runningSum -= buffer[head];
     }
-    
+
     runningSum += value;
     buffer[head] = value;
     head = (head + 1) % BUFFER_SIZE;
-    
-    if (head == 0) {
+
+    if (head == 0)
+    {
         bufferFull = true;
     }
-    
-    if (bufferFull) {
+
+    if (bufferFull)
+    {
         return runningSum / BUFFER_SIZE;
-    } else {
+    }
+    else
+    {
         return runningSum / head;
     }
 }
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, SPI interface, and the MCP356x ADC.
  */
-void setup() {
+void setup()
+{
     // Initialize serial communication
     Serial.begin(115200);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
 
@@ -113,16 +121,16 @@ void setup() {
 
     // Create and initialize the ADC
     scale = new MCP356x(config);
-    
+
     // Print CSV header for data output
     Serial.println("Timestamp,RawValue,Butterworth,SMA,Median,Notch,CustomAverage");
 }
 
 // Filter Configuration
-constexpr double SAMPLING_FREQUENCY = 11111;  // Hz (based on ADC sampling rate)
-constexpr double CUT_OFF_FREQUENCY = 10;      // Hz (filter cutoff frequency)
+constexpr double SAMPLING_FREQUENCY = 11111; // Hz (based on ADC sampling rate)
+constexpr double CUT_OFF_FREQUENCY = 10;     // Hz (filter cutoff frequency)
 constexpr double NORMALIZED_CUT_OFF = 2 * CUT_OFF_FREQUENCY / SAMPLING_FREQUENCY;
-constexpr double NOTCH_FREQUENCY = 50;        // Hz (notch filter frequency)
+constexpr double NOTCH_FREQUENCY = 50; // Hz (notch filter frequency)
 constexpr double NORMALIZED_NOTCH = 2 * NOTCH_FREQUENCY / SAMPLING_FREQUENCY;
 
 // Initialize filter instances
@@ -135,16 +143,18 @@ auto secondaryNotchFilter = simpleNotchFIR(0.06360676);
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads data from the ADC, applies various filters,
  * and outputs the raw and filtered values for comparison.
  */
-void loop() {
+void loop()
+{
     // Check if the ADC has new data available
-    if (scale->updatedReadings()) {
+    if (scale->updatedReadings())
+    {
         // Get raw ADC reading
         int rawReading = scale->value(LOADCELL_CHANNEL);
-        
+
         // Apply different filters to the raw reading
         float butterworthFilteredValue = butterworthFilter(rawReading);
         int averagedValue = simpleMovingAvg(rawReading);
@@ -163,9 +173,9 @@ void loop() {
                        static_cast<int>(notchedValue),
                        customRunningAverage);
 
-        Serial.println((char*)output.string());
+        Serial.println((char *)output.string());
     }
-    
+
     // Small delay to prevent overwhelming the serial output
     delayMicroseconds(90);
 }

@@ -43,7 +43,7 @@
 #define SAMPLE_DURATION 20 // Sample interval set to 20 ms
 
 // Declaration of MCP356xScale object
-MCP356xScale* mcpScale = nullptr;
+MCP356xScale *mcpScale = nullptr;
 
 // Global variables for timing and sampling
 unsigned long startTime = 0;
@@ -53,13 +53,15 @@ float totalReading[TOTAL_NUM_CELLS] = {0};
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, the MCP356xScale instance,
  * and prepares for data collection.
  */
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  while (!Serial) delay(10); // Wait for the serial port to connect
+  while (!Serial)
+    delay(10); // Wait for the serial port to connect
 
   // Initialize the MCP356xScale object
   mcpScale = new MCP356xScale(TOTAL_NUM_CELLS, SCK_PIN, SDO_PIN, SDI_PIN, IRQ_PIN0, CS_PIN0, IRQ_PIN1, CS_PIN1, IRQ_PIN2, CS_PIN2);
@@ -72,25 +74,31 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads from the ADCs, calculates average readings,
  * and sends the data via serial communication.
  */
-void loop() {
+void loop()
+{
   // Continuously update ADC readings
-  if (mcpScale->updatedAdcReadings()) {
+  if (mcpScale->updatedAdcReadings())
+  {
     sampleCount++;
-    for (int i = 0; i < TOTAL_NUM_CELLS; i++) {
+    for (int i = 0; i < TOTAL_NUM_CELLS; i++)
+    {
       totalReading[i] += mcpScale->getReading(i);
     }
   }
 
   // Check for serial commands
-  if (Serial.available() > 0) {
+  if (Serial.available() > 0)
+  {
     String command = Serial.readStringUntil('\n');
-    if (command.startsWith("T,")) {
+    if (command.startsWith("T,"))
+    {
       int tareValue = command.substring(2).toInt(); // Extract number after "T,"
-      if (tareValue > 0) {
+      if (tareValue > 0)
+      {
         mcpScale->tare(tareValue); // Execute tare with specified iterations
       }
     }
@@ -98,9 +106,11 @@ void loop() {
 
   // Check if it's time to calculate and send the average readings
   currentTime = millis();
-  if (currentTime - startTime >= SAMPLE_DURATION) {
+  if (currentTime - startTime >= SAMPLE_DURATION)
+  {
     int averageReading[TOTAL_NUM_CELLS];
-    for (int i = 0; i < TOTAL_NUM_CELLS; i++) {
+    for (int i = 0; i < TOTAL_NUM_CELLS; i++)
+    {
       averageReading[i] = round(totalReading[i] / sampleCount);
       totalReading[i] = 0; // Reset totalReading for the next sampling period
     }

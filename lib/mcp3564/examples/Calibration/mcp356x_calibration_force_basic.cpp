@@ -25,22 +25,24 @@
 #define SDI_PIN 11
 #define SDO_PIN 12
 #define SCK_PIN 13
-#define CS_PIN  7
+#define CS_PIN 7
 #define IRQ_PIN 6
 
 // Pointer for MCP356xScale object
-MCP356xScale* mcpScale = nullptr;
+MCP356xScale *mcpScale = nullptr;
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, the MCP356xScale instance,
  * applies calibration, and performs tare operation.
  */
-void setup() {
+void setup()
+{
     // Initialize serial communication
     Serial.begin(115200);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
 
@@ -58,14 +60,15 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads data from the load cell, calculates and displays
  * tare-corrected readings, original ADC values, and loop statistics.
  */
-void loop() {
+void loop()
+{
     static uint32_t lastPrintTime = 0;
-    static uint32_t loopCounter   = 0;
-    uint32_t currentTime          = millis();
+    static uint32_t loopCounter = 0;
+    uint32_t currentTime = millis();
 
     // Update ADC readings
     mcpScale->updatedAdcReadings();
@@ -74,12 +77,13 @@ void loop() {
     loopCounter++;
 
     // Print readings every 2 seconds
-    if (currentTime - lastPrintTime >= 2000) {
+    if (currentTime - lastPrintTime >= 2000)
+    {
         lastPrintTime = currentTime;
 
         StringBuilder output;
         // Get tare-corrected reading and original ADC value
-        float tareReading = mcpScale->getReading(0);  
+        float tareReading = mcpScale->getReading(0);
         double adcValue = mcpScale->getRawValue(0);
 
         output.concatf("Tare-corrected reading: %.2f, Original ADC value: %.0f\n", tareReading, adcValue);
@@ -93,8 +97,9 @@ void loop() {
         // Print loop counter
         output.concatf("Loop iterations: %lu\n", loopCounter);
 
-        if (output.length() > 0) {
-            Serial.print((char*)output.string());
+        if (output.length() > 0)
+        {
+            Serial.print((char *)output.string());
         }
 
         // Reset loop counter

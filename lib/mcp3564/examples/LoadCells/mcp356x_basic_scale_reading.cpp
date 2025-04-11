@@ -32,37 +32,40 @@
 const int TOTAL_SCALES = 1;
 
 // Global variables
-MCP356xScale* scale = nullptr;
+MCP356xScale *scale = nullptr;
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication and the MCP356xScale instance.
  */
-void setup() {
+void setup()
+{
     Serial.begin(9600);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
-    
+
     // Initialize the MCP356xScale with one scale
     scale = new MCP356xScale(TOTAL_SCALES, SCK_PIN, SDO_PIN, SDI_PIN, IRQ_PIN, CS_PIN);
-    
+
     // Optionally, here you can set up channel mappings, perform calibration, and set scale factors
     // Example: scale->setScaleFactor(0, 0.0005f); // Set calibration factor for first scale
-    
+
     Serial.println("MCP356x scale initialized and ready.");
 }
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously updates ADC readings and outputs the force reading from the scale.
  */
-void loop() {
+void loop()
+{
     // Update readings from all ADCs
     scale->updatedAdcReadings();
-    
+
     // For demonstration, assuming we are working with the first scale (index 0)
     int scaleIndex = 0;
 

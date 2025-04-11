@@ -32,20 +32,20 @@ const uint8_t SDO_PIN = 12;
 const uint8_t SCK_PIN = 13;
 
 // Pins for ADC1, ADC2 and ADC3
-const uint8_t MCP_ADC1_CS_PIN  = 2;
+const uint8_t MCP_ADC1_CS_PIN = 2;
 const uint8_t MCP_ADC1_IRQ_PIN = 3;
-const uint8_t MCP_ADC2_CS_PIN  = 5;
+const uint8_t MCP_ADC2_CS_PIN = 5;
 const uint8_t MCP_ADC2_IRQ_PIN = 4;
-const uint8_t MCP_ADC3_CS_PIN  = 7;
+const uint8_t MCP_ADC3_CS_PIN = 7;
 const uint8_t MCP_ADC3_IRQ_PIN = 6;
 
-// Configuration for ADC1, ADC2, ADC3 
+// Configuration for ADC1, ADC2, ADC3
 MCP356xConfig adc1Config = {MCP_ADC1_IRQ_PIN, MCP_ADC1_CS_PIN};
 MCP356xConfig adc2Config = {MCP_ADC2_IRQ_PIN, MCP_ADC2_CS_PIN};
 MCP356xConfig adc3Config = {MCP_ADC3_IRQ_PIN, MCP_ADC3_CS_PIN};
-MCP356x       adc1(adc1Config);
-MCP356x       adc2(adc2Config);
-MCP356x       adc3(adc3Config);
+MCP356x adc1(adc1Config);
+MCP356x adc2(adc2Config);
+MCP356x adc3(adc3Config);
 
 // Three-axis Load Cell Instances for each load cell
 MCP356xScale scaleX1(&adc1, MCP356xChannel::DIFF_A);
@@ -89,11 +89,12 @@ float coeffsZ4[3] = {-263.695282, 0.000599632857, 5.86901761e-12};
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, SPI interface, and the MCP356x ADCs.
  * Sets up calibration coefficients for all load cells and tares them.
  */
-void setup() {
+void setup()
+{
     Serial.begin(115200);
     SPI.setMISO(SDO_PIN);
     SPI.setMOSI(SDI_PIN);
@@ -119,19 +120,21 @@ void setup() {
     threeAxisLoadCell3.tareScales();
     Serial.println("Calibration start4");
     threeAxisLoadCell4.tareScales();
-    
+
     Serial.println("All load cells calibrated and tared.");
 }
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads force data from the first 3-axis load cell when available
  * and outputs the 3D force data along with timestamps.
  */
-void loop() {
-    if (adc1.isr_fired && (2 == adc1.read())) {
- 
+void loop()
+{
+    if (adc1.isr_fired && (2 == adc1.read()))
+    {
+
         // Acquire the 3D force data in grams force
         Force3D forceReadings = threeAxisLoadCell1.ForceData3D();
 

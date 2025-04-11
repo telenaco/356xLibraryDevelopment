@@ -2,8 +2,8 @@
  * @file mcp356x_6axis_telemetry.cpp
  * @brief Reads data from 6-axis force/torque sensor and streams telemetry data.
  *
- * This program reads data from 12 load cells arranged in a six-axis force/torque sensor 
- * configuration using the MCP356x3axis and MCP356x6axis libraries. It combines readings 
+ * This program reads data from 12 load cells arranged in a six-axis force/torque sensor
+ * configuration using the MCP356x3axis and MCP356x6axis libraries. It combines readings
  * from four 3-axis load cells to measure forces and torques in all six degrees of freedom.
  * The measurements are streamed via serial communication in a format suitable for
  * visualization in telemetry software.
@@ -42,22 +42,24 @@
 #define TOTAL_NUM_CELLS 12
 
 // Global variables
-MCP356xScale* mcpScale = nullptr;
-MCP356x3axis* loadCell1 = nullptr;
-MCP356x3axis* loadCell2 = nullptr;
-MCP356x3axis* loadCell3 = nullptr;
-MCP356x3axis* loadCell4 = nullptr;
-MCP356x6axis* sixAxisLoadCell = nullptr;
+MCP356xScale *mcpScale = nullptr;
+MCP356x3axis *loadCell1 = nullptr;
+MCP356x3axis *loadCell2 = nullptr;
+MCP356x3axis *loadCell3 = nullptr;
+MCP356x3axis *loadCell4 = nullptr;
+MCP356x6axis *sixAxisLoadCell = nullptr;
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, the MCP356xScale instance,
  * and the MCP356x3axis and MCP356x6axis objects. Sets up calibration.
  */
-void setup() {
+void setup()
+{
     Serial.begin(115200);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
 
@@ -71,7 +73,8 @@ void setup() {
     loadCell4 = new MCP356x3axis(mcpScale, 9, 10, 11);
 
     // Tare operation for all load cells to set the current weight as the zero point
-    for (int i = 0; i < TOTAL_NUM_CELLS; i++) { 
+    for (int i = 0; i < TOTAL_NUM_CELLS; i++)
+    {
         mcpScale->tare(i);
     }
 
@@ -88,25 +91,37 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously updates ADC readings, processes the 6-axis force/torque data,
  * and outputs the readings along with elapsed time for telemetry visualization.
  */
-void loop() {
+void loop()
+{
     uint32_t startMicros = micros(); // Start time for this loop iteration
 
     // Update the ADC readings from all connected load cells
-    if (mcpScale->updatedAdcReadings()) {
+    if (mcpScale->updatedAdcReadings())
+    {
         StringBuilder output;
-        
+
         // Construct the message with readings for each 3-axis load cell
-        for (int i = 1; i <= 4; i++) {
-            MCP356x3axis* currentLoadCell = nullptr;
-            switch(i) {
-                case 1: currentLoadCell = loadCell1; break;
-                case 2: currentLoadCell = loadCell2; break;
-                case 3: currentLoadCell = loadCell3; break;
-                case 4: currentLoadCell = loadCell4; break;
+        for (int i = 1; i <= 4; i++)
+        {
+            MCP356x3axis *currentLoadCell = nullptr;
+            switch (i)
+            {
+            case 1:
+                currentLoadCell = loadCell1;
+                break;
+            case 2:
+                currentLoadCell = loadCell2;
+                break;
+            case 3:
+                currentLoadCell = loadCell3;
+                break;
+            case 4:
+                currentLoadCell = loadCell4;
+                break;
             }
 
             Matrix<3, 1> gfReading = currentLoadCell->getGfReading();
@@ -117,7 +132,8 @@ void loop() {
             output.concat((int)round(gfReading(1)));
             output.concat(',');
             output.concat((int)round(gfReading(2)));
-            if (i < 4) {
+            if (i < 4)
+            {
                 output.concat(','); // Separator between load cell readings
             }
         }
@@ -128,6 +144,6 @@ void loop() {
         output.concat(elapsedTime);
 
         // Send the combined grams-force readings and elapsed time for all load cells over serial
-        Serial.println((char*)output.string());
+        Serial.println((char *)output.string());
     }
 }

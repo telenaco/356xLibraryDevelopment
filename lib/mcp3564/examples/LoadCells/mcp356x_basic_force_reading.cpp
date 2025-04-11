@@ -26,7 +26,7 @@
 #define SDI_PIN 11
 #define SDO_PIN 12
 #define SCK_PIN 13
-#define CS_PIN  7
+#define CS_PIN 7
 #define IRQ_PIN 6
 
 // Filter Configuration for MCP356x
@@ -35,23 +35,25 @@ constexpr double MCP_CUT_OFF_FREQUENCY = 11;
 constexpr double MCP_NORMALIZED_CUT_OFF = 2 * MCP_CUT_OFF_FREQUENCY / MCP_SAMPLING_FREQUENCY;
 
 // Global Variables
-MCP356xScale* mcpScale              = nullptr;
-auto butterworthFilter              = butter<1>(MCP_NORMALIZED_CUT_OFF);
-int32_t mcpRawReading               = 0;
-float mcpFilteredReading            = 0;
-uint32_t lastSuccessfulMCPReadTime  = 0;
-uint32_t elapsedMCPMicros           = 0;
+MCP356xScale *mcpScale = nullptr;
+auto butterworthFilter = butter<1>(MCP_NORMALIZED_CUT_OFF);
+int32_t mcpRawReading = 0;
+float mcpFilteredReading = 0;
+uint32_t lastSuccessfulMCPReadTime = 0;
+uint32_t elapsedMCPMicros = 0;
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, the MCP356xScale instance,
  * and configures the calibration parameters.
  */
-void setup() {
+void setup()
+{
     // Initialize Serial Communication
     Serial.begin(115200);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
 
@@ -63,22 +65,24 @@ void setup() {
     // Alternative calibration methods (commented out)
     // mcpScale->setLinearCalibration(0, 0.0006028f, -538.524f);
     // mcpScale->setPolynomialCalibration(0, 0.0f, 0.0006026f, -538.554f);
-    
+
     // Tare the load cell
     mcpScale->tare(0);
 }
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads from the ADC, measures timing between readings,
  * applies filtering, and outputs the results at regular intervals.
  */
-void loop() {
+void loop()
+{
     static uint32_t lastPrintTime = 0;
 
     // Update ADC readings
-    if (mcpScale->updatedAdcReadings()) {
+    if (mcpScale->updatedAdcReadings())
+    {
         elapsedMCPMicros = micros() - lastSuccessfulMCPReadTime;
         mcpRawReading = mcpScale->getReading(0);
         mcpFilteredReading = butterworthFilter(mcpRawReading);
@@ -89,15 +93,16 @@ void loop() {
     uint32_t currentTime = millis();
 
     // Print the readings every 500ms
-    if (currentTime - lastPrintTime >= 500) {
+    if (currentTime - lastPrintTime >= 500)
+    {
         lastPrintTime = currentTime;
 
         // Prepare the output string
         StringBuilder output;
         output.concatf("Raw Reading: %ld, Filtered Reading: %.2f grams, Time Elapsed: %lu microseconds",
-            mcpRawReading, mcpFilteredReading, elapsedMCPMicros);
+                       mcpRawReading, mcpFilteredReading, elapsedMCPMicros);
 
         // Output the readings
-        Serial.println((char*)output.string());
+        Serial.println((char *)output.string());
     }
 }

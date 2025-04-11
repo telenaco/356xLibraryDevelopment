@@ -22,29 +22,31 @@
 #include <MCP356x3axis.h>
 
 // Pin Definitions
-#define SDI_PIN  11
-#define SDO_PIN  12
-#define SCK_PIN  13
-#define CS_PIN0  7
+#define SDI_PIN 11
+#define SDO_PIN 12
+#define SCK_PIN 13
+#define CS_PIN0 7
 #define IRQ_PIN0 6
 
 #define TOTAL_NUM_CELLS 3
 
 // Global variables
-MCP356xScale* mcpScale = nullptr;
-MCP356x3axis* loadCell1 = nullptr;
+MCP356xScale *mcpScale = nullptr;
+MCP356x3axis *loadCell1 = nullptr;
 
 uint32_t lastPrintTime = 0;
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, the MCP356xScale instance,
  * and the MCP356x3axis object. Performs initial tare operation.
  */
-void setup() {
+void setup()
+{
     Serial.begin(115200);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
 
@@ -52,7 +54,8 @@ void setup() {
     mcpScale = new MCP356xScale(TOTAL_NUM_CELLS, SCK_PIN, SDO_PIN, SDI_PIN, IRQ_PIN0, CS_PIN0);
 
     // Tare operation for all load cells to set the current weight as the zero point
-    for (int i = 0; i < TOTAL_NUM_CELLS; i++) {
+    for (int i = 0; i < TOTAL_NUM_CELLS; i++)
+    {
         mcpScale->tare(i);
     }
 
@@ -64,18 +67,20 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously updates ADC readings and outputs the digital readings
  * from the 3-axis load cell and individual load cell readings.
  */
-void loop() {
+void loop()
+{
     uint32_t currentTime = millis();
 
     // Update the ADC readings from all connected load cells
     mcpScale->updatedAdcReadings();
 
     // Check if it's time to print the readings
-    if (currentTime - lastPrintTime >= 500) {
+    if (currentTime - lastPrintTime >= 500)
+    {
         lastPrintTime = currentTime;
 
         // Get the digital reading from the 3-axis load cell
@@ -86,19 +91,20 @@ void loop() {
         outputForce1.concat("DigRed 1:\t");
         outputForce1.concatf("3axisX\t%.0f\t", digRead(0)); // X
         outputForce1.concatf("3axisY\t%.0f\t", digRead(1)); // Y
-        outputForce1.concatf("3axisZ\t%.0f\n", digRead(2));   // Z
-        Serial.print((char*)outputForce1.string());
+        outputForce1.concatf("3axisZ\t%.0f\n", digRead(2)); // Z
+        Serial.print((char *)outputForce1.string());
 
         // Prepare the output for individual load cells' readings on the next line
         StringBuilder outputLoadCells;
         outputLoadCells.concat("Load Cells:\t");
-        for (int i = 0; i < TOTAL_NUM_CELLS; i++) {
+        for (int i = 0; i < TOTAL_NUM_CELLS; i++)
+        {
             double reading = mcpScale->getReading(i);
             outputLoadCells.concatf("loadCell%d\t%.0f\t", i + 1, reading);
         }
         outputLoadCells.concat("\n"); // End the line for Load Cells readings
 
         // Print the tare-corrected readings from each load cell
-        Serial.print((char*)outputLoadCells.string());
+        Serial.print((char *)outputLoadCells.string());
     }
 }

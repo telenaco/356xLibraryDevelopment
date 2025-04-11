@@ -41,29 +41,31 @@
 MCP356x mcpScale(ADC_IRQ_PIN, ADC_CS_PIN, MCLK_PIN);
 
 // Number of channels to monitor
-const int NUM_CHANNELS = 2;  // Only A and B
+const int NUM_CHANNELS = 2; // Only A and B
 
 /**
  * @brief Structure to store raw digital readings
  */
-struct MCPReadings {
+struct MCPReadings
+{
     int A = 0;
     int B = 0;
 } mcpReadings;
 
 // Filter Configuration for MCP356x
 constexpr double MCP_SAMPLING_FREQUENCY = 11000;
-constexpr double MCP_CUT_OFF_FREQUENCY  = 48;
+constexpr double MCP_CUT_OFF_FREQUENCY = 48;
 constexpr double MCP_NORMALIZED_CUT_OFF = 2 * MCP_CUT_OFF_FREQUENCY / MCP_SAMPLING_FREQUENCY;
 
 // Filter instances for different data streams
-auto butterworthMcpDigitalFilter = butter<1>(MCP_NORMALIZED_CUT_OFF);  // For digital readings
-auto butterworthMcpForceFilter = butter<1>(MCP_NORMALIZED_CUT_OFF);    // For force readings
+auto butterworthMcpDigitalFilter = butter<1>(MCP_NORMALIZED_CUT_OFF); // For digital readings
+auto butterworthMcpForceFilter = butter<1>(MCP_NORMALIZED_CUT_OFF);   // For force readings
 
 /**
  * @brief Structure to store filtered digital readings
  */
-struct MCPFilteredReadings {
+struct MCPFilteredReadings
+{
     float A = 0;
     float B = 0;
 } mcpFilteredReadings;
@@ -71,7 +73,8 @@ struct MCPFilteredReadings {
 /**
  * @brief Structure to store calibrated force values
  */
-struct MCPForces {
+struct MCPForces
+{
     float A = 0;
     float B = 0;
 } mcpForces;
@@ -79,20 +82,22 @@ struct MCPForces {
 /**
  * @brief Structure to store filtered force values
  */
-struct MCPFilteredForces {
+struct MCPFilteredForces
+{
     float A = 0;
     float B = 0;
 } mcpFilteredForces;
 
 /**
  * @brief Configure the ADC with appropriate settings
- * 
+ *
  * Sets up the ADC with internal clock, scan channels, oversampling ratio,
  * and gain settings for optimal load cell reading.
- * 
+ *
  * @param adc Reference to the MCP356x ADC object
  */
-void setupADC(MCP356x &adc) {
+void setupADC(MCP356x &adc)
+{
     adc.setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
     adc.init(&SPI);
     adc.setScanChannels(NUM_CHANNELS, CHANNEL_A, CHANNEL_B);
@@ -103,16 +108,17 @@ void setupADC(MCP356x &adc) {
 
 /**
  * @brief Format and print readings to serial port
- * 
+ *
  * Outputs timestamp, raw reading, filtered reading, force, and filtered force values.
  */
-void printOutput() {
+void printOutput()
+{
     unsigned long elapsedTime = micros();
     char output[200];
-    snprintf(output, sizeof(output), "%lu, %d, %f, %f, %f", 
-             elapsedTime, 
+    snprintf(output, sizeof(output), "%lu, %d, %f, %f, %f",
+             elapsedTime,
              mcpReadings.A,
-             mcpFilteredReadings.A, 
+             mcpFilteredReadings.A,
              mcpForces.A,
              mcpFilteredForces.A);
 
@@ -122,31 +128,34 @@ void printOutput() {
 
 /**
  * @brief Convert channel character to index
- * 
+ *
  * Helper function to convert a channel identifier character to its
  * corresponding index for use in arrays.
- * 
+ *
  * @param channel Channel identifier ('a' or 'b')
  * @return int Index of the channel, or -1 if invalid
  */
-int channelToIndex(char channel) {
-    switch (channel) {
+int channelToIndex(char channel)
+{
+    switch (channel)
+    {
     case 'a':
         return 0;
     case 'b':
         return 1;
     default:
-        return -1;  // Invalid channel
+        return -1; // Invalid channel
     }
 }
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, SPI interface, and the MCP356x ADC.
  * Configures the ADC and applies initial calibration for the S-beam load cell.
  */
-void setup() {
+void setup()
+{
     // Initialize serial communication
     Serial.begin(115200);
 
@@ -159,12 +168,13 @@ void setup() {
     // Configure ADC for S-beam load cell
     setupADC(mcpScale);
     mcpScale.tare(CHANNEL_A);
-    
+
     // Set Linear Calibration for S-beam load cell
     mcpScale.setLinearCalibration(CHANNEL_A, 0.0005683752659612749f, 17.224049032974072f);
 
     // Wait for serial connection before proceeding
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
     Serial.println("Setup complete - S-beam calibration ready");
@@ -172,18 +182,20 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads from the ADC, applies filtering, and processes
  * the data through multiple paths (raw, filtered, calibrated, etc.).
  * Outputs processed readings to the serial port.
  */
-void loop() {
+void loop()
+{
     // Check for new ADC data
-    if (mcpScale.isr_fired && mcpScale.read() == 2) {
+    if (mcpScale.isr_fired && mcpScale.read() == 2)
+    {
         // Digital Readings
         mcpReadings.A = mcpScale.getDigitalValue(CHANNEL_A);
         // mcpReadings.B = mcpScale.getDigitalValue(CHANNEL_B);
-        
+
         // Filtered Digital Readings
         mcpFilteredReadings.A = butterworthMcpDigitalFilter(mcpReadings.A);
         // mcpFilteredReadings.B = butterworthMcpDigitalFilter(mcpReadings.B);
@@ -191,7 +203,7 @@ void loop() {
         // Force Readings
         mcpForces.A = mcpScale.getForce(CHANNEL_A);
         // mcpForces.B = mcpScale.getForce(CHANNEL_B);
-        
+
         // Filtered Force Readings
         mcpFilteredForces.A = butterworthMcpForceFilter(mcpForces.A);
         // mcpFilteredForces.B = butterworthMcpForceFilter(mcpForces.B);

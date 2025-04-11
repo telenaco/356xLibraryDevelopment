@@ -39,12 +39,13 @@ const MCP356xChannel CHANNEL_D = MCP356xChannel::DIFF_D;
 MCP356x mcpScale(ADC_IRQ_PIN, ADC_CS_PIN, MCLK_PIN);
 
 // Number of channels to monitor
-const int NUM_CHANNELS = 4;  // a, b, c, d
+const int NUM_CHANNELS = 4; // a, b, c, d
 
 /**
  * @brief Structure to store channel readings
  */
-struct MCPReadings {
+struct MCPReadings
+{
     int A = 0;
     int B = 0;
     int C = 0;
@@ -52,18 +53,19 @@ struct MCPReadings {
 } mcpReadings;
 
 // Calibration data storage
-float calibrationReadings[NUM_CHANNELS][9] = {{0}};  // Initialize all to 0
-float calibrationWeights[NUM_CHANNELS][9] = {{0}};   // Initialize all to 0
+float calibrationReadings[NUM_CHANNELS][9] = {{0}}; // Initialize all to 0
+float calibrationWeights[NUM_CHANNELS][9] = {{0}};  // Initialize all to 0
 
 /**
  * @brief Configure the ADC for multi-channel operation
- * 
+ *
  * Sets up the ADC with appropriate settings for multi-channel calibration,
  * including internal clock, channel scanning, and conversion mode.
- * 
+ *
  * @param adc Reference to the MCP356x ADC object
  */
-void setupADC(MCP356x &adc) {
+void setupADC(MCP356x &adc)
+{
     adc.setOption(MCP356X_FLAG_USE_INTERNAL_CLK);
     adc.init(&SPI);
     adc.setScanChannels(NUM_CHANNELS, CHANNEL_A, CHANNEL_B, CHANNEL_C, CHANNEL_D);
@@ -74,14 +76,15 @@ void setupADC(MCP356x &adc) {
 
 /**
  * @brief Read and average multiple readings from all MCP channels
- * 
+ *
  * Takes multiple samples from each channel and calculates the average
  * to improve reading stability.
  */
-void readMCPChannelsAverage() {
+void readMCPChannelsAverage()
+{
     // Declare and initialize channels to average
     MCP356xChannel channels[NUM_CHANNELS] = {CHANNEL_A, CHANNEL_B, CHANNEL_C, CHANNEL_D};
-    
+
     // Array to store the resulting averages
     int32_t averages[NUM_CHANNELS];
 
@@ -97,18 +100,19 @@ void readMCPChannelsAverage() {
 
 /**
  * @brief Format and print channel readings to serial port
- * 
+ *
  * Outputs timestamp and readings for all channels.
  */
-void printOutput() {
+void printOutput()
+{
     unsigned long elapsedTime = micros();
     char output[250];
     snprintf(output, sizeof(output), "%lu, %d, %d, %d, %d",
-           elapsedTime, 
-           mcpReadings.A, 
-           mcpReadings.B,  
-           mcpReadings.C,  
-           mcpReadings.D);
+             elapsedTime,
+             mcpReadings.A,
+             mcpReadings.B,
+             mcpReadings.C,
+             mcpReadings.D);
 
     Serial.println(output);
     Serial.flush();
@@ -116,59 +120,66 @@ void printOutput() {
 
 /**
  * @brief Convert channel character to index
- * 
+ *
  * Helper function to convert a channel identifier character to its
  * corresponding index for use in arrays.
- * 
+ *
  * @param channel Channel identifier ('a' through 'd')
  * @return int Index of the channel, or -1 if invalid
  */
-int channelToIndex(char channel) {
-    switch (channel) {
-        case 'a':
-            return 0;
-        case 'b':
-            return 1;
-        case 'c':
-            return 2;
-        case 'd':
-            return 3;
-        default:
-            return -1;  // Invalid channel
+int channelToIndex(char channel)
+{
+    switch (channel)
+    {
+    case 'a':
+        return 0;
+    case 'b':
+        return 1;
+    case 'c':
+        return 2;
+    case 'd':
+        return 3;
+    default:
+        return -1; // Invalid channel
     }
 }
 
 /**
  * @brief Store calibration data for a specific channel and calibration point
- * 
+ *
  * @param channelIndex Index of the channel (0-3)
  * @param calibIndex Index of the calibration point (1-9)
  * @param weight Known weight value for calibration
  * @param reading ADC reading for the given weight
  */
 void storeCalibrationData(int channelIndex, int calibIndex, float weight,
-                          float reading) {
+                          float reading)
+{
     if (channelIndex >= 0 && channelIndex < NUM_CHANNELS && calibIndex >= 1 &&
-        calibIndex <= 9) {
-        calibrationReadings[channelIndex][calibIndex - 1] = reading;  // Adjust for 0-based index
+        calibIndex <= 9)
+    {
+        calibrationReadings[channelIndex][calibIndex - 1] = reading; // Adjust for 0-based index
         calibrationWeights[channelIndex][calibIndex - 1] = weight;
     }
 }
 
 /**
  * @brief Output complete calibration dataset
- * 
+ *
  * Prints all stored calibration data points to the serial port
  * in a CSV format: Channel,Index,Weight,Reading
  */
-void outputCalibrationData() {
+void outputCalibrationData()
+{
     Serial.println("Channel,Index,Weight,Reading");
-    for (int ch = 0; ch < NUM_CHANNELS; ch++) {
-        for (int i = 0; i < 9; i++) {
-            char channelChar = 'a' + ch;  // Convert index back to channel char
+    for (int ch = 0; ch < NUM_CHANNELS; ch++)
+    {
+        for (int i = 0; i < 9; i++)
+        {
+            char channelChar = 'a' + ch; // Convert index back to channel char
             Serial.print(channelChar);
             Serial.print(",");
-            Serial.print(i + 1);  // Adjust for 0-based index
+            Serial.print(i + 1); // Adjust for 0-based index
             Serial.print(",");
             Serial.print(calibrationWeights[ch][i]);
             Serial.print(",");
@@ -179,48 +190,53 @@ void outputCalibrationData() {
 
 /**
  * @brief Handle serial input for calibration commands
- * 
+ *
  * Process user input for setting calibration points or outputting
  * calibration data. Format: "channel,index,weight" or "X" to output.
  */
-void handleSerialInput() {
-    while (Serial.available()) {
-        String inputData = Serial.readStringUntil('\n');  // Read until newline character
-        inputData.trim();  // Remove any leading or trailing whitespace
-        
+void handleSerialInput()
+{
+    while (Serial.available())
+    {
+        String inputData = Serial.readStringUntil('\n'); // Read until newline character
+        inputData.trim();                                // Remove any leading or trailing whitespace
+
         // Check for export command
-        if (inputData == "X" || inputData == "x") {
+        if (inputData == "X" || inputData == "x")
+        {
             outputCalibrationData();
             return;
         }
-        
+
         // Parse calibration command
-        int firstSeparator = inputData.indexOf(',');  // Find the first separator (comma)
-        int secondSeparator = inputData.indexOf(',', firstSeparator + 1);  // Find the second separator
-        
-        if (firstSeparator != -1 && secondSeparator != -1) {
+        int firstSeparator = inputData.indexOf(',');                      // Find the first separator (comma)
+        int secondSeparator = inputData.indexOf(',', firstSeparator + 1); // Find the second separator
+
+        if (firstSeparator != -1 && secondSeparator != -1)
+        {
             char channelChar = inputData.charAt(0);
             int channelIndex = channelToIndex(channelChar);
             int calibIndex = inputData.substring(firstSeparator + 1, secondSeparator).toInt();
             float weight = inputData.substring(secondSeparator + 1).toFloat();
             float reading = 0;
-            
+
             // Get the reading for the specified channel
-            switch (channelChar) {
-                case 'a':
-                    reading = mcpReadings.A;
-                    break;
-                case 'b':
-                    reading = mcpReadings.B;
-                    break;
-                case 'c':
-                    reading = mcpReadings.C;
-                    break;
-                case 'd':
-                    reading = mcpReadings.D;
-                    break;
+            switch (channelChar)
+            {
+            case 'a':
+                reading = mcpReadings.A;
+                break;
+            case 'b':
+                reading = mcpReadings.B;
+                break;
+            case 'c':
+                reading = mcpReadings.C;
+                break;
+            case 'd':
+                reading = mcpReadings.D;
+                break;
             }
-            
+
             // Store the calibration data point
             storeCalibrationData(channelIndex, calibIndex, weight, reading);
         }
@@ -229,10 +245,11 @@ void handleSerialInput() {
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, SPI interface, and the MCP356x ADC.
  */
-void setup() {
+void setup()
+{
     // Initialize serial communication
     Serial.begin(115200);
 
@@ -244,9 +261,10 @@ void setup() {
 
     // Configure ADC for multi-channel calibration
     setupADC(mcpScale);
-    
+
     // Wait for serial connection before proceeding
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
     Serial.println("Setup complete - multi-channel calibration ready");
@@ -254,17 +272,18 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads from the ADC channels, outputs readings,
  * and processes any calibration commands received via serial.
  */
-void loop() {
+void loop()
+{
     // Read the average values from the channels
     readMCPChannelsAverage();
-    
+
     // Print every new reading
     printOutput();
-    
+
     // Handle any input from the serial console
-    handleSerialInput(); 
+    handleSerialInput();
 }

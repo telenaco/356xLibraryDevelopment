@@ -41,26 +41,26 @@
 
 /**
  * @brief Base MCP356x ADC configuration structure
- * 
+ *
  * This structure defines the common settings for all ADCs.
  * Specific pins are updated for each ADC instance.
  */
 MCP356xConfig config = {
-    .irq_pin = ADC0_IRQ_PIN,                       // Default IRQ pin (updated for each ADC)
-    .cs_pin = ADC0_CS_PIN,                         // Default CS pin (updated for each ADC)
-    .mclk_pin = 0,                                 // Master Clock pin (0 for internal clock)
-    .addr = 0x01,                                  // Device address (GND in this case)
-    .spiInterface = &SPI,                          // SPI interface to use
-    .numChannels = 4,                              // Number of channels to scan
-    .osr = MCP356xOversamplingRatio::OSR_32,       // Oversampling ratio
-    .gain = MCP356xGain::GAIN_1,                   // Gain setting (1x)
-    .mode = MCP356xADCMode::ADC_CONVERSION_MODE    // Continuous conversion mode
+    .irq_pin = ADC0_IRQ_PIN,                    // Default IRQ pin (updated for each ADC)
+    .cs_pin = ADC0_CS_PIN,                      // Default CS pin (updated for each ADC)
+    .mclk_pin = 0,                              // Master Clock pin (0 for internal clock)
+    .addr = 0x01,                               // Device address (GND in this case)
+    .spiInterface = &SPI,                       // SPI interface to use
+    .numChannels = 4,                           // Number of channels to scan
+    .osr = MCP356xOversamplingRatio::OSR_32,    // Oversampling ratio
+    .gain = MCP356xGain::GAIN_1,                // Gain setting (1x)
+    .mode = MCP356xADCMode::ADC_CONVERSION_MODE // Continuous conversion mode
 };
 
 // Pointers for dynamically created ADC objects
-MCP356x* adc0 = nullptr;
-MCP356x* adc1 = nullptr;
-MCP356x* adc2 = nullptr;
+MCP356x *adc0 = nullptr;
+MCP356x *adc1 = nullptr;
+MCP356x *adc2 = nullptr;
 
 // Variables for timing and sample counting
 unsigned long startTime;
@@ -70,18 +70,20 @@ unsigned int sampleCount2 = 0;
 
 /**
  * @brief Reads data from an ADC and increments its sample counter
- * 
+ *
  * @param adc Pointer to the MCP356x ADC to read from
  * @param sampleCounter Reference to the sample counter for this ADC
  */
-void readADC(MCP356x& adc, unsigned int& sampleCounter) {
-    if (adc.updatedReadings()) {
+void readADC(MCP356x &adc, unsigned int &sampleCounter)
+{
+    if (adc.updatedReadings())
+    {
         // Read voltage values from all four differential channels
         float voltageA = adc.valueAsVoltage(MCP356xChannel::DIFF_A);
         float voltageB = adc.valueAsVoltage(MCP356xChannel::DIFF_B);
         float voltageC = adc.valueAsVoltage(MCP356xChannel::DIFF_C);
         float voltageD = adc.valueAsVoltage(MCP356xChannel::DIFF_D);
-        
+
         // Increment the sample counter for this ADC
         sampleCounter++;
     }
@@ -89,11 +91,12 @@ void readADC(MCP356x& adc, unsigned int& sampleCounter) {
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, SPI interface, and three MCP356x ADCs.
  * Configures each ADC for sampling four differential channels.
  */
-void setup() {
+void setup()
+{
     // Initialize serial communication
     Serial.begin(115200);
     Serial.print("\n\n");
@@ -106,12 +109,12 @@ void setup() {
 
     // Create and initialize the first ADC
     adc0 = new MCP356x(config);
-    
+
     // Update configuration and create the second ADC
     config.cs_pin = ADC1_CS_PIN;
     config.irq_pin = ADC1_IRQ_PIN;
     adc1 = new MCP356x(config);
-    
+
     // Update configuration and create the third ADC
     config.cs_pin = ADC2_CS_PIN;
     config.irq_pin = ADC2_IRQ_PIN;
@@ -128,24 +131,29 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Reads data from all three ADCs, counts samples, and calculates sampling rates
  * every 5 seconds. Outputs individual and total kilosamples per second (ksps).
  */
-void loop() {
+void loop()
+{
     // Check each ADC for new data and update sample counts
-    if (adc0->updatedReadings()) {
+    if (adc0->updatedReadings())
+    {
         readADC(*adc0, sampleCount0);
     }
-    if (adc1->updatedReadings()) {
+    if (adc1->updatedReadings())
+    {
         readADC(*adc1, sampleCount1);
     }
-    if (adc2->updatedReadings()) {
+    if (adc2->updatedReadings())
+    {
         readADC(*adc2, sampleCount2);
     }
 
     // Every 5 seconds, calculate and display sampling statistics
-    if (millis() - startTime >= 5000) {
+    if (millis() - startTime >= 5000)
+    {
         // Calculate samples per second for each ADC in kilosamples per second (ksps)
         float ksps0 = sampleCount0 / 5.0 / 1000.0;
         float ksps1 = sampleCount1 / 5.0 / 1000.0;
@@ -158,7 +166,7 @@ void loop() {
         output.concatf("ADC1 ksps: %.2f\n", ksps1);
         output.concatf("ADC2 ksps: %.2f\n", ksps2);
         output.concatf("Total ksps: %.2f\n", totalKsps);
-        Serial.print((char*)output.string());
+        Serial.print((char *)output.string());
 
         // Reset for the next interval
         startTime = millis();

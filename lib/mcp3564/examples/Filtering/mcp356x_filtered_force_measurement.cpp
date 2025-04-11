@@ -35,20 +35,22 @@ constexpr double MCP_CUT_OFF_FREQUENCY = 11;
 constexpr double MCP_NORMALIZED_CUT_OFF = 2 * MCP_CUT_OFF_FREQUENCY / MCP_SAMPLING_FREQUENCY;
 
 // Global Variables
-MCP356xScale* mcpScale = nullptr;
+MCP356xScale *mcpScale = nullptr;
 auto butterworthFilter = butter<1>(MCP_NORMALIZED_CUT_OFF);
 float mcpRawReading = 0;
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, the MCP356xScale instance,
  * and configures the calibration parameters.
  */
-void setup() {
+void setup()
+{
     // Initialize Serial Communication
     Serial.begin(115200);
-    while (!Serial) {
+    while (!Serial)
+    {
         delay(10);
     }
 
@@ -60,18 +62,19 @@ void setup() {
     // Alternative calibration methods (commented out)
     // mcpScale->setLinearCalibration(0, 0.0006027751375968074f, -538.5241383004725f);
     // mcpScale->setPolynomialCalibration(0, 8.095189745489105e-14f, 0.0006025713062654753f, -538.5539280900973f);
-    
+
     // Tare the load cell
     mcpScale->tare(0);
 }
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads from the ADC, applies filtering,
  * and outputs the raw and filtered values at regular intervals.
  */
-void loop() {
+void loop()
+{
     static uint32_t lastPrintTime = 0;
 
     // Update ADC readings
@@ -83,7 +86,8 @@ void loop() {
     uint32_t currentTime = millis();
 
     // Print the readings every 500ms
-    if (currentTime - lastPrintTime >= 500) {
+    if (currentTime - lastPrintTime >= 500)
+    {
         lastPrintTime = currentTime;
 
         // Prepare the output string
@@ -91,6 +95,6 @@ void loop() {
         output.concatf("Raw = %.2f, Filtered = %.2f\n", mcpRawReading, filteredReading);
 
         // Output the readings
-        Serial.print((char*)output.string());
+        Serial.print((char *)output.string());
     }
 }

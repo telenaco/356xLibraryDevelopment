@@ -33,16 +33,16 @@ const uint8_t SDO_PIN = 12;
 const uint8_t SCK_PIN = 13;
 
 // Pins for ADC1, ADC2 and ADC3
-const uint8_t MCP_ADC1_CS_PIN  = 2;
+const uint8_t MCP_ADC1_CS_PIN = 2;
 const uint8_t MCP_ADC1_IRQ_PIN = 3;
-const uint8_t MCP_ADC2_CS_PIN  = 5;
+const uint8_t MCP_ADC2_CS_PIN = 5;
 const uint8_t MCP_ADC2_IRQ_PIN = 4;
-const uint8_t MCP_ADC3_CS_PIN  = 7;
+const uint8_t MCP_ADC3_CS_PIN = 7;
 const uint8_t MCP_ADC3_IRQ_PIN = 6;
 
 // Configuration for ADC1, ADC2 & ADC3
 MCP356xConfig adc1Config = {MCP_ADC1_IRQ_PIN, MCP_ADC1_CS_PIN};
-MCP356x       adc1(adc1Config);
+MCP356x adc1(adc1Config);
 
 // Three-axis Load Cell Instances
 // Load cell one (using channels A (x), B(y), C(z) from ADC1)
@@ -55,11 +55,12 @@ MCP356x3axis threeAxisLoadCell(&scaleA1, &scaleB1, &scaleC1);
 
 /**
  * @brief Filter class for applying moving average to sensor readings.
- * 
+ *
  * This class implements a moving average filter to smooth out noise from
  * load cell readings, improving measurement stability.
  */
-class Filter {
+class Filter
+{
 private:
     float *buffer;
     int index;
@@ -69,12 +70,14 @@ private:
 public:
     /**
      * @brief Constructor for the Filter class.
-     * 
+     *
      * @param _size Size of the filter window
      */
-    Filter(int _size) : index(0), size(_size), sum(0) {
+    Filter(int _size) : index(0), size(_size), sum(0)
+    {
         buffer = new float[size];
-        for (int i = 0; i < size; ++i) {
+        for (int i = 0; i < size; ++i)
+        {
             buffer[i] = 0.0;
         }
     }
@@ -82,17 +85,19 @@ public:
     /**
      * @brief Destructor for the Filter class.
      */
-    ~Filter() {
+    ~Filter()
+    {
         delete[] buffer;
     }
 
     /**
      * @brief Adds a new value to the buffer and computes the moving average.
-     * 
+     *
      * @param value New value to add to the filter
      * @return Moving average of values in the filter window
      */
-    float addValue(float value) {
+    float addValue(float value)
+    {
         sum -= buffer[index];
         buffer[index] = value;
         sum += value;
@@ -108,11 +113,12 @@ Filter filterZ(10000);
 
 /**
  * @brief Setup function run once at startup
- * 
+ *
  * Initializes serial communication, SPI interface, and the MCP356x ADC.
  * Configures ADC1 to scan 3 channels with OSR_64 oversampling ratio.
  */
-void setup() {
+void setup()
+{
     Serial.begin(115200);
     SPI.setMISO(SDO_PIN);
     SPI.setMOSI(SDI_PIN);
@@ -124,12 +130,14 @@ void setup() {
 
 /**
  * @brief Main program loop
- * 
+ *
  * Continuously reads data from the ADC when available, applies filtering
  * to each axis, and outputs the filtered readings as CSV data.
  */
-void loop() {
-    if (adc1.isr_fired && (2 == adc1.read())) {
+void loop()
+{
+    if (adc1.isr_fired && (2 == adc1.read()))
+    {
         // Acquire the 3D force data
         Reading3D forceReadings = threeAxisLoadCell.digitalReading3D();
 
@@ -141,9 +149,9 @@ void loop() {
         // Print the current time in microseconds and the filtered readings for each axis on a single line
         Serial.print(micros());
         Serial.print(",");
-        Serial.print(filteredX, 1);  // One decimal place for X-Axis
+        Serial.print(filteredX, 1); // One decimal place for X-Axis
         Serial.print(",");
-        Serial.print(filteredY, 1);  // One decimal place for Y-Axis
+        Serial.print(filteredY, 1); // One decimal place for Y-Axis
         Serial.print(",");
         Serial.println(filteredZ, 1); // One decimal place for Z-Axis
     }
